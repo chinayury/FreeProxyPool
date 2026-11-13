@@ -10,10 +10,6 @@ permissions:
   packages: write
   actions: write
 
-env:
-  # ghcr.io 要求镜像路径全小写
-  IMAGE: ghcr.io/${{ github.repository_owner }}/freeproxypool
-
 jobs:
   package:
     name: build wheel & sdist
@@ -25,7 +21,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: 构建 wheel + sdist
+      - name: Build wheel and sdist
         run: |
           python -m pip install --upgrade pip build
           python -m build
@@ -37,13 +33,15 @@ jobs:
           retention-days: 1
 
   docker:
-    name: build & push GHCR image
+    name: build and push GHCR image
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: 计算版本号（去掉 tag 前缀 v）
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      - name: Compute image and version
+        run: |
+          echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/freeproxypool" >> "$GITHUB_ENV"
+          echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
       - uses: docker/setup-buildx-action@v3
 
@@ -53,7 +51,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 构建并推送镜像（latest + 当前版本，单平台单清单）
+      - name: Build and push image (latest + current version)
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -80,7 +78,7 @@ jobs:
           name: python-packages
           path: dist
 
-      - name: 创建 Release 并上传当前版本产物
+      - name: Create release and upload assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -90,54 +88,54 @@ jobs:
             dist/*
 
   cleanup:
-    name: purge old artifacts (keep latest only)
+    name: purge old artifacts
     runs-on: ubuntu-latest
     needs: [release, docker]
     steps:
       - uses: actions/checkout@v4
 
-      - name: 删除旧 Release 的附件（保留 Release 记录）
+      - name: Delete old release assets (keep release records)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           current="${{ github.ref_name }}"
           for tag in $(gh release list --json tagName --jq '.[].tagName'); do
             if [ "$tag" != "$current" ]; then
-              echo "清理旧 Release $tag 的附件…"
+              echo "purge assets of old release $tag"
               gh release view "$tag" --json assets --jq '.assets[].name' | while read -r asset; do
                 gh release delete-asset "$tag" "$asset" --yes || true
               done
             fi
           done
 
-      - name: 清理旧 GHCR 镜像版本（只留 latest 与当前版本）
+      - name: Delete stale GHCR versions (keep latest and current)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           current="${{ github.ref_name#v }}"
-          owner="${{ github.repository_owner }}"
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
           api="https://api.github.com/users/$owner/packages/container/freeproxypool/versions?per_page=100"
           total=0
           for id in $(curl -fsS -H "Authorization: Bearer $GH_TOKEN" "$api" \
               | jq -r --arg cur "$current" \
               '.[] | select((.metadata.container.tags | map(select(. == "latest" or . == $cur)) | length) == 0) | .id'); do
-            echo "删除 GHCR 版本 $id"
+            echo "delete GHCR version $id"
             curl -fsS -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
               "https://api.github.com/users/$owner/packages/container/freeproxypool/versions/$id"
             total=$((total+1))
           done
-          echo "已删除 $total 个旧镜像版本"
+          echo "deleted $total old image versions"
 
-      - name: 清理历史 Actions artifacts（保留当前 run）
+      - name: Delete old workflow artifacts (keep current run)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          repo="${{ github.repository }}"
-          current_run="${{ github.run_id }}"
+          repo="${GITHUB_REPOSITORY}"
+          current_run="${GITHUB_RUN_ID}"
           for a in $(curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
               "https://api.github.com/repos/$repo/actions/artifacts?per_page=100" \
               | jq -r --arg cur "$current_run" '.artifacts[] | select(.workflow_run.id != ($cur|tonumber)) | .id'); do
-            echo "删除历史 artifact $a"
+            echo "delete stale artifact $a"
             curl -fsS -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
               "https://api.github.com/repos/$repo/actions/artifacts/$a"
           done
