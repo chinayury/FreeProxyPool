@@ -121,7 +121,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          current="${{ github.ref_name#v }}"
+          current="${GITHUB_REF_NAME#v}"
           owner="${GITHUB_REPOSITORY_OWNER,,}"
           api="https://api.github.com/users/$owner/packages/container/freeproxypool/versions?per_page=100"
           total=0
