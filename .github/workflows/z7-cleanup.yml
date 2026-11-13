@@ -1,0 +1,62 @@
+name: Z7 Cleanup Job Probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+  actions: write
+
+jobs:
+  cleanup:
+    name: purge old artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Delete old release assets (keep release records)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          current="${{ github.ref_name }}"
+          for tag in $(gh release list --json tagName --jq '.[].tagName'); do
+            if [ "$tag" != "$current" ]; then
+              echo "purge assets of old release $tag"
+              gh release view "$tag" --json assets --jq '.assets[].name' | while read -r asset; do
+                gh release delete-asset "$tag" "$asset" --yes || true
+              done
+            fi
+          done
+
+      - name: Delete stale GHCR versions (keep latest and current)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          current="${{ github.ref_name#v }}"
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          api="https://api.github.com/users/$owner/packages/container/freeproxypool/versions?per_page=100"
+          total=0
+          for id in $(curl -fsS -H "Authorization: Bearer $GH_TOKEN" "$api" \
+              | jq -r --arg cur "$current" \
+              '.[] | select((.metadata.container.tags | map(select(. == "latest" or . == $cur)) | length) == 0) | .id'); do
+            echo "delete GHCR version $id"
+            curl -fsS -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/users/$owner/packages/container/freeproxypool/versions/$id"
+            total=$((total+1))
+          done
+          echo "deleted $total old image versions"
+
+      - name: Delete old workflow artifacts (keep current run)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          repo="${GITHUB_REPOSITORY}"
+          current_run="${GITHUB_RUN_ID}"
+          for a in $(curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/$repo/actions/artifacts?per_page=100" \
+              | jq -r --arg cur "$current_run" '.artifacts[] | select(.workflow_run.id != ($cur|tonumber)) | .id'); do
+            echo "delete stale artifact $a"
+            curl -fsS -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/$repo/actions/artifacts/$a"
+          done
