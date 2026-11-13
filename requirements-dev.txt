@@ -1,0 +1,16 @@
+# FreeProxyPool 开发/测试依赖（v0.1.0）
+#
+# 仅用于两处，**不会进入运行时镜像**：
+#   1. Dockerfile 的 checker 构建阶段（跑自检套件）
+#   2. 本地执行 `python proxyPool.py selftest`
+#
+# 运行时依赖见 requirements.txt，两者不要混用。
+
+-r requirements.txt
+
+# FastAPI/Starlette 的 TestClient 依赖 httpx。
+# v0.1.0 首版遗漏了这一项，被 Dockerfile checker 阶段拦截：
+# 构建时自检直接报 "The starlette.testclient module requires the httpx
+# package to be installed"，导致镜像构建失败。
+# 属于真实的打包缺陷 —— 本地环境恰好装了 httpx 才没暴露。
+httpx>=0.27,<1.0

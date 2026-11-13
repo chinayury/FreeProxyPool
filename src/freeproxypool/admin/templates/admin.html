@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>FreeProxyPool · 控制台</title>
+<style>
+:root{
+  --primary:#0d9488; --primary-dark:#0f766e; --primary-soft:#ccfbf1;
+  --accent:#06b6d4; --accent-soft:#ecfeff;
+  --danger:#dc2626; --danger-dark:#b91c1c; --danger-soft:#fee2e2;
+  --warn:#b45309; --warn-soft:#fef3c7;
+  --ok:#059669; --ok-soft:#d1fae5;
+  --bg:#f4f7f6; --panel:#fff; --border:#e4e9e8; --border-strong:#d3dbd9;
+  --text:#0f172a; --text2:#64748b; --text3:#94a3b8;
+  --sidebar:240px;
+  --radius:12px; --radius-sm:8px;
+  --shadow-sm:0 1px 2px rgba(15,23,42,.05);
+  --shadow-md:0 6px 18px rgba(15,23,42,.08);
+  --ring:0 0 0 3px rgba(13,148,136,.15);
+}
+*{box-sizing:border-box}
+html{height:100%}
+body{margin:0;font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+     background:var(--bg);color:var(--text);font-size:14px;line-height:1.55}
+button,input,select,textarea{font-family:inherit;font-size:14px}
+a{color:var(--primary);text-decoration:none}
+/* 按钮 */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;
+     padding:8px 14px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);
+     background:var(--panel);color:var(--text);cursor:pointer;font-weight:500;
+     transition:all .15s ease;box-shadow:var(--shadow-sm)}
+.btn:hover{border-color:var(--primary);color:var(--primary);transform:translateY(-1px)}
+.btn:active{transform:translateY(0)}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.btn svg{width:15px;height:15px}
+.btn-primary{background:linear-gradient(135deg,var(--primary),var(--primary-dark));
+             border-color:transparent;color:#fff}
+.btn-primary:hover{color:#fff;filter:brightness(1.05)}
+.btn-danger{background:var(--danger);border-color:transparent;color:#fff}
+.btn-danger:hover{background:var(--danger-dark);color:#fff}
+.btn-ghost{background:transparent;box-shadow:none}
+.btn-ghost:hover{background:var(--primary-soft)}
+.btn-sm{padding:5px 10px;font-size:12.5px}
+/* 徽标 */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;
+       font-size:11px;font-weight:600;line-height:1.6}
+.badge-green{background:var(--ok-soft);color:#065f46}
+.badge-red{background:var(--danger-soft);color:#991b1b}
+.badge-blue{background:#dbeafe;color:#1e40af}
+.badge-gray{background:#f1f5f9;color:#475569}
+.badge-amber{background:var(--warn-soft);color:#92400e}
+.tag{display:inline-block;padding:1px 7px;background:var(--accent-soft);color:#0e7490;
+     border:1px solid #cffafe;border-radius:5px;font-size:11px;margin:1px;font-weight:500}
+input[type=text],input[type=number],input[type=password],select,textarea{
+  width:100%;padding:8px 11px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);
+  background:var(--panel);color:var(--text);outline:none;
+  transition:border-color .15s,box-shadow .15s}
+input:focus,select:focus,textarea:focus{border-color:var(--primary);box-shadow:var(--ring)}
+.row{display:flex;gap:12px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+/* 表格 */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--border);vertical-align:middle}
+th{font-weight:600;color:var(--text3);font-size:11px;text-transform:uppercase;
+   letter-spacing:.04em;background:#f8faf9}
+tbody tr{transition:background .12s}
+tbody tr:hover{background:var(--primary-soft)}
+tbody tr:last-child td{border-bottom:none}
+.empty{text-align:center;color:var(--text2);padding:28px}
+.hint{font-size:11.5px;color:var(--text2);line-height:1.5}
+/* 登录页 */
+#login{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+      background:radial-gradient(1100px 560px at 15% -10%,#e0fff8 0%,transparent 60%),
+                 radial-gradient(900px 480px at 110% 110%,#ecfeff 0%,transparent 55%),var(--bg);
+      z-index:100}
+#login .card{width:372px;padding:36px 32px;background:var(--panel);
+             border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow-md);
+             text-align:center}
+#login .logo{margin:0 auto 16px}
+#login .card h2{margin:0 0 6px;font-size:20px;font-weight:700;letter-spacing:-.3px}
+#login .card .sub{margin:0 0 20px;font-size:13px;color:var(--text2)}
+/* 应用框架 */
+#app{display:none;min-height:100vh}
+#sidebar{width:var(--sidebar);background:var(--panel);border-right:1px solid var(--border);
+         position:fixed;top:0;bottom:0;left:0;overflow-y:auto;padding:0}
+.brand{display:flex;align-items:center;gap:11px;padding:20px 18px 18px;
+       border-bottom:1px solid var(--border);margin-bottom:8px}
+.logo{width:38px;height:38px;border-radius:11px;flex-shrink:0;
+      background:linear-gradient(135deg,var(--primary),var(--accent));
+      padding:9px;box-shadow:0 4px 12px rgba(13,148,136,.28)}
+.logo svg{width:100%;height:100%;display:block}
+.brand-body{display:flex;flex-direction:column;line-height:1.3;min-width:0}
+.brand-body strong{font-size:15px;font-weight:700;letter-spacing:-.2px}
+.brand-body small{font-size:11px;color:var(--text2)}
+.nav-item{display:flex;align-items:center;gap:11px;margin:2px 10px;padding:9px 12px;
+          cursor:pointer;font-size:13px;font-weight:500;color:var(--text2);
+          border-radius:var(--radius-sm);border-left:3px solid transparent;
+          transition:all .15s ease}
+.nav-item svg{width:18px;height:18px;flex-shrink:0}
+.nav-item:hover{background:var(--primary-soft);color:var(--text)}
+.nav-item.active{background:var(--primary-soft);color:var(--primary-dark);
+                 border-left-color:var(--primary);font-weight:600}
+.sidebar-foot{margin:14px 10px 10px;padding:12px 12px;border-top:1px solid var(--border);
+              display:flex;align-items:center;justify-content:space-between;font-size:12px}
+/* 主内容区 */
+#main{margin-left:var(--sidebar);padding:26px 30px;max-width:1440px}
+#topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;
+        flex-wrap:wrap;gap:12px;padding-bottom:16px;border-bottom:1px solid var(--border)}
+#topbar h2{margin:0;font-size:21px;font-weight:700;letter-spacing:-.3px}
+.topactions{display:flex;gap:8px;align-items:center}
+/* 统计卡片 */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;margin-bottom:20px}
+.stat-card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+           padding:16px 18px;box-shadow:var(--shadow-sm);transition:transform .15s,box-shadow .15s;
+           position:relative;overflow:hidden}
+.stat-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
+                   background:linear-gradient(180deg,var(--primary),var(--accent));opacity:.85}
+.stat-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-md)}
+.stat-card .label{font-size:11.5px;color:var(--text2);margin-bottom:8px;font-weight:500}
+.stat-card .value{font-size:26px;font-weight:700;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
+.stat-card .value.green{color:var(--ok)} .stat-card .value.red{color:var(--danger)}
+/* 面板 */
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+       padding:18px 20px;margin-bottom:16px;box-shadow:var(--shadow-sm)}
+.panel h3{margin:0 0 14px;font-size:14px;font-weight:600;letter-spacing:-.1px}
+.pager{display:flex;justify-content:center;align-items:center;gap:10px;margin-top:14px}
+/* 长任务进度条（借鉴 docs/09 P1-3） */
+.pbar{height:8px;background:#e2e8f0;border-radius:999px;overflow:hidden;margin:6px 0}
+.pbar>i{display:block;height:100%;background:linear-gradient(90deg,var(--primary),var(--accent));
+        border-radius:999px;transition:width .4s ease}
+.pbar.stale>i{background:var(--danger)}
+.pbar.done>i{background:var(--ok)}
+.prow{display:flex;justify-content:space-between;align-items:center;font-size:12px;
+      color:var(--text2);margin-top:12px}
+.prow:first-child{margin-top:0}
+/* 开关 */
+.switch{position:relative;display:inline-block;width:38px;height:21px}
+.switch input{opacity:0;width:0;height:0}
+.slider{position:absolute;cursor:pointer;inset:0;background:#cbd5e1;border-radius:999px;transition:.2s}
+.slider:before{content:"";position:absolute;height:15px;width:15px;left:3px;bottom:3px;
+               background:#fff;border-radius:50%;transition:.2s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.switch input:checked + .slider{background:var(--primary)}
+.switch input:checked + .slider:before{transform:translateX(17px)}
+/* 日志 / 告警（浅色终端风格） */
+#logBox{background:#f8fafc;color:#0f172a;padding:14px;border:1px solid var(--border);
+        border-radius:var(--radius-sm);max-height:520px;overflow:auto;
+        font-family:"JetBrains Mono",Consolas,Monaco,"Courier New",monospace;font-size:12px;
+        line-height:1.7;white-space:pre-wrap;word-break:break-all}
+/* 提示浮层 */
+#toast{position:fixed;top:18px;right:18px;z-index:999;display:flex;flex-direction:column;gap:8px}
+.toast{padding:10px 18px;border-radius:var(--radius-sm);background:var(--ok);color:#fff;
+       font-size:13px;font-weight:500;box-shadow:var(--shadow-md);animation:slide .22s ease}
+.toast.error{background:var(--danger)}
+@keyframes slide{from{transform:translateX(36px);opacity:0}}
+.view{display:none} .view.active{display:block}
+.dialog-mask{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;
+             align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(2px)}
+.dialog{background:var(--panel);border-radius:14px;padding:26px;width:384px;
+        border:1px solid var(--border);box-shadow:var(--shadow-md)}
+.mono{font-family:"JetBrains Mono",Consolas,Monaco,"Courier New",monospace}
+</style>
+</head>
+<body>
+
+<!-- ============ 登录页 ============ -->
+<div id="login">
+  <div class="card">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    </div>
+    <h2 data-i18n="login.title">FreeProxyPool</h2>
+    <p class="sub" data-i18n="login.subtitle">请输入管理密码</p>
+    <input type="password" id="loginPwd" data-i18n-ph="login.placeholder"
+           placeholder="请输入管理密码" onkeydown="if(event.key==='Enter')doLogin()">
+    <div id="loginError" class="hint" style="color:var(--danger);min-height:18px;margin-top:6px"></div>
+    <button class="btn btn-primary" style="width:100%;margin-top:10px"
+            data-i18n="login.submit" onclick="doLogin()">登 录</button>
+    <div class="hint" style="text-align:center;margin-top:16px">
+      <a href="#" onclick="toggleLang();return false" id="langBtnLogin">English</a>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 强制改密 ============ -->
+<div id="pwdDialog" style="display:none">
+  <div class="dialog-mask">
+    <div class="dialog">
+      <h3 style="margin:0 0 6px" data-i18n="pwd.title">请先修改管理密码</h3>
+      <p class="hint" style="margin:0 0 16px" data-i18n="pwd.desc">
+        当前仍在使用默认口令，出于安全考虑必须先修改才能继续使用。</p>
+      <input type="password" id="pwdNew" data-i18n-ph="pwd.ph1" placeholder="新密码（至少 10 位，含大小写/数字/特殊字符中的 3 类）">
+      <input type="password" id="pwdNew2" style="margin-top:8px"
+             data-i18n-ph="pwd.ph2" placeholder="再次输入新密码">
+      <div id="pwdError" class="hint" style="color:var(--danger);min-height:18px;margin-top:6px"></div>
+      <button class="btn btn-primary" style="width:100%;margin-top:8px"
+              data-i18n="pwd.submit" onclick="submitPassword()">保存并继续</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 主界面 ============ -->
+<div id="app">
+  <nav id="sidebar">
+    <div class="brand">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      </div>
+      <div class="brand-body">
+        <strong>FreeProxyPool</strong>
+        <small id="verText">v0.1.0</small>
+      </div>
+    </div>
+    <div class="nav-item active" data-view="overview"   onclick="switchView('overview',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg><span data-i18n="nav.overview">总览</span></div>
+    <div class="nav-item" data-view="proxies"    onclick="switchView('proxies',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></svg><span data-i18n="nav.proxies">代理资源池</span></div>
+    <div class="nav-item" data-view="blacklist"  onclick="switchView('blacklist',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="14.5" y1="9" x2="9.5" y2="14"/><line x1="9.5" y1="9" x2="14.5" y2="14"/></svg><span data-i18n="nav.blacklist">黑名单</span></div>
+    <div class="nav-item" data-view="fetchers"   onclick="switchView('fetchers',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg><span data-i18n="nav.fetchers">采集源</span></div>
+    <div class="nav-item" data-view="process"    onclick="switchView('process',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg><span data-i18n="nav.process">运行状态</span></div>
+    <div class="nav-item" data-view="config"     onclick="switchView('config',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg><span data-i18n="nav.config">参数配置</span></div>
+    <div class="nav-item" data-view="alerts"     onclick="switchView('alerts',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span data-i18n="nav.alerts">告警中心</span></div>
+    <div class="nav-item" data-view="logs"       onclick="switchView('logs',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg><span data-i18n="nav.logs">运行日志</span></div>
+    <div class="sidebar-foot">
+      <a href="#" style="color:var(--primary)" onclick="toggleLang();return false" id="langBtn">EN</a>
+      <span style="cursor:pointer;color:var(--text2)" id="logoutBtn"
+            data-i18n="action.logout">退出</span>
+    </div>
+  </nav>
+
+  <main id="main">
+    <div id="topbar">
+      <h2 id="viewTitle" data-i18n="nav.overview">概览</h2>
+      <div class="topactions">
+        <button class="btn btn-sm btn-primary" onclick="doTrigger('check')"
+                data-i18n="action.recheck">立即校验</button>
+        <button class="btn btn-sm" onclick="doTrigger('fetch')"
+                data-i18n="action.refetch">立即采集</button>
+      </div>
+    </div>
+
+    <!-- 概览 -->
+    <section class="view active" id="view-overview">
+      <div class="stat-grid" id="statGrid"></div>
+      <div class="panel">
+        <h3 data-i18n="proc.progress">任务进度</h3>
+        <div id="progressStats"></div>
+      </div>
+      <div class="panel">
+        <h3 data-i18n="ov.fetchers">采集源运行情况</h3>
+        <div id="fetcherStats"></div>
+      </div>
+      <div class="panel">
+        <h3 data-i18n="ov.regions">地域分布</h3>
+        <div id="regionStats"></div>
+      </div>
+      <div class="panel">
+        <h3 data-i18n="ov.tiers">延迟分布</h3>
+        <div id="tierStats"></div>
+      </div>
+      <div class="panel">
+        <h3 data-i18n="ov.protocols">协议分布</h3>
+        <div id="protocolStats"></div>
+      </div>
+    </section>
+
+    <!-- 代理池 -->
+    <section class="view" id="view-proxies">
+      <div class="panel">
+        <div class="row">
+          <div style="width:150px"><input type="text" id="qSource" data-i18n-ph="flt.source"
+               placeholder="采集源" oninput="loadProxies(1)"></div>
+          <div style="width:110px"><input type="text" id="qRegion" data-i18n-ph="flt.region"
+               placeholder="地区(CN)" oninput="loadProxies(1)"></div>
+          <div style="width:110px"><input type="number" id="qScoreMin" data-i18n-ph="flt.scoreMin"
+               placeholder="最低分" oninput="loadProxies(1)"></div>
+          <div style="width:90px"><input type="number" id="qScoreMax" data-i18n-ph="flt.scoreMax"
+               placeholder="最高分" oninput="loadProxies(1)"></div>
+          <select id="qTier" style="width:110px" onchange="loadProxies(1)">
+            <option value="" data-i18n-opt="flt.tierAll">全部延迟档</option>
+            <option value="fast" data-i18n-opt="tier.fast">快</option>
+            <option value="medium" data-i18n-opt="tier.medium">中</option>
+            <option value="slow" data-i18n-opt="tier.slow">慢</option>
+            <option value="unknown" data-i18n-opt="tier.unknown">未知</option>
+          </select>
+          <select id="qProtocol" style="width:110px" onchange="loadProxies(1)">
+            <option value="" data-i18n-opt="flt.protocolAll">全部协议</option>
+            <option value="http" data-i18n-opt="proto.http">HTTP</option>
+            <option value="socks5" data-i18n-opt="proto.socks5">SOCKS5</option>
+            <option value="socks4" data-i18n-opt="proto.socks4">SOCKS4</option>
+          </select>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px">
+            <input type="checkbox" id="qHttps" onchange="loadProxies(1)">
+            <span data-i18n="flt.https">仅 HTTPS</span></label>
+          <button class="btn btn-sm" data-i18n="common.delete" onclick="batchDelete()">批量删除</button>
+          <button class="btn btn-sm" data-i18n="act.clearPool" onclick="clearPool()">清空代理池</button>
+          <button class="btn btn-sm" onclick="loadProxies(proxyPage)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
+        </div>
+        <div id="proxyTable"></div>
+        <div class="pager" id="proxyPager"></div>
+      </div>
+    </section>
+
+    <!-- 黑名单 -->
+    <section class="view" id="view-blacklist">
+      <div class="panel">
+        <div class="row">
+          <div style="width:220px"><input type="text" id="blackProxyInput"
+               data-i18n-ph="black.ph" placeholder="1.2.3.4:8080" onkeydown="if(event.key==='Enter')addBlack()"></div>
+          <button class="btn btn-sm btn-primary" data-i18n="black.add" onclick="addBlack()">拉黑</button>
+          <button class="btn btn-sm btn-danger" data-i18n="black.clear" onclick="clearBlacklist()">清空黑名单</button>
+        </div>
+        <div id="blackTable"></div>
+        <div class="pager" id="blackPager"></div>
+      </div>
+    </section>
+
+    <!-- 采集源 -->
+    <section class="view" id="view-fetchers">
+      <div class="panel"><div id="fetcherTable"></div></div>
+    </section>
+
+    <!-- 运行状态 -->
+    <section class="view" id="view-process">
+      <div class="stat-grid" id="procGrid"></div>
+      <div class="panel">
+        <h3 data-i18n="proc.tripped">熔断中的采集源</h3>
+        <div id="downList"></div>
+      </div>
+      <div class="panel">
+        <h3 data-i18n="proc.progress">任务进度</h3>
+        <div id="progressList"></div>
+      </div>
+    </section>
+
+    <!-- 配置 -->
+    <section class="view" id="view-config">
+      <div class="panel">
+        <div class="row">
+          <span class="hint" data-i18n="cfg.tip">
+            修改后立即生效（标注"需重启"的项除外）。密码类输入框留空表示不修改。</span>
+          <button class="btn btn-sm btn-danger" data-i18n="cfg.resetAll"
+                  onclick="if(confirm(t('cfg.confirmReset')))resetConfig()">重置全部配置</button>
+        </div>
+        <div id="configGroups"></div>
+      </div>
+    </section>
+
+    <!-- 告警 -->
+    <section class="view" id="view-alerts">
+      <div class="panel">
+        <div class="row">
+          <button class="btn btn-sm btn-danger" data-i18n="alerts.clear" onclick="clearAlerts()">清空告警</button>
+          <button class="btn btn-sm" onclick="loadAlerts()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
+        </div>
+        <div id="alertBox" class="mono" style="max-height:600px;overflow:auto;
+             background:var(--bg);padding:12px;border-radius:6px;font-size:12px"></div>
+      </div>
+    </section>
+
+    <!-- 日志 -->
+    <section class="view" id="view-logs">
+      <div class="panel">
+        <div class="row">
+          <select id="logLevel" style="width:120px" onchange="loadLogs()">
+            <option value="ALL">ALL</option>
+            <option value="DEBUG">DEBUG</option>
+            <option value="INFO">INFO</option>
+            <option value="WARNING">WARNING</option>
+            <option value="ERROR">ERROR</option>
+            <option value="CRITICAL">CRITICAL</option>
+          </select>
+          <input type="text" id="logSearch" style="width:220px" data-i18n-ph="logs.search"
+                 placeholder="搜索" oninput="renderLogs()">
+          <button class="btn btn-sm btn-danger" data-i18n="logs.clear" onclick="clearLogs()">清空日志</button>
+          <button class="btn btn-sm" onclick="loadLogs()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
+        </div>
+        <div id="logBox"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* =====================================================================
+ * 安全约定（v0.1.0）
+ *
+ * 所有来自后端的动态内容，在拼进 innerHTML 之前**必须**经过 esc()。
+ * 旧版直接把 proxy / source / region / url 拼进模板，实测可被采集源
+ * 投毒的字段内容（如 source 名里带 <img onerror=...>）触发 XSS。
+ * ===================================================================== */
+function esc(v){
+  if(v===null||v===undefined) return '';
+  return String(v)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+/* 注入 onclick 参数时使用：先转义为 JS 字符串字面量，再做 HTML 转义 */
+function escArg(v){ return esc(JSON.stringify(String(v==null?'':v))); }
+
+/* ---------- 极简 i18n ---------- */
+var I18N = {
+  'login.title':      {zh:'FreeProxyPool 中台', en:'FreeProxyPool Console'},
+  'login.subtitle':   {zh:'请输入管理密码', en:'Admin password required'},
+  'login.placeholder':{zh:'请输入管理密码', en:'Enter admin password'},
+  'login.submit':     {zh:'登 录', en:'Sign in'},
+  'pwd.title':        {zh:'请先修改管理密码', en:'Change your password first'},
+  'pwd.desc':         {zh:'当前仍在使用默认口令，出于安全考虑必须先修改才能继续使用。',
+                       en:'The default password is still in use. You must change it to continue.'},
+  'pwd.ph1':          {zh:'新密码（至少 10 位，含大写/小写/数字/特殊字符中的 3 类）',
+                       en:'New password (min 10 chars, 3 of: upper/lower/digit/symbol)'},
+  'pwd.ph2':          {zh:'再次输入新密码', en:'Confirm new password'},
+  'pwd.submit':       {zh:'保存并继续', en:'Save and continue'},
+  'app.title':        {zh:'FreeProxyPool · 控制台', en:'FreeProxyPool Console'},
+  'nav.overview':     {zh:'总览', en:'Overview'},
+  'nav.proxies':      {zh:'代理资源池', en:'Proxy Pool'},
+  'nav.blacklist':    {zh:'黑名单', en:'Blacklist'},
+  'nav.fetchers':     {zh:'采集源', en:'Sources'},
+  'nav.process':      {zh:'运行状态', en:'Runtime'},
+  'nav.config':       {zh:'参数配置', en:'Settings'},
+  'nav.alerts':       {zh:'告警中心', en:'Alerts'},
+  'nav.logs':         {zh:'运行日志', en:'Logs'},
+  'action.logout':    {zh:'退出', en:'Sign out'},
+  'action.recheck':   {zh:'立即校验', en:'Recheck now'},
+  'action.refetch':   {zh:'立即采集', en:'Fetch now'},
+  'ov.fetchers':      {zh:'采集源运行情况', en:'Fetcher status'},
+  'ov.regions':       {zh:'地域分布', en:'Regions'},
+  'ov.tiers':         {zh:'延迟分布', en:'Latency tiers'},
+  'ov.protocols':     {zh:'协议分布', en:'Protocols'},
+  'stat.pool':        {zh:'有效代理', en:'Valid proxies'},
+  'stat.https':       {zh:'HTTPS 代理', en:'HTTPS proxies'},
+  'stat.fetcher':     {zh:'启用采集源', en:'Enabled sources'},
+  'stat.blacklist':   {zh:'黑名单', en:'Blacklist'},
+  'stat.queue':       {zh:'待验队列', en:'Queue depth'},
+  'stat.redis':       {zh:'Redis', en:'Redis'},
+  'stat.mysql':       {zh:'MySQL 归档', en:'MySQL archive'},
+  'stat.on':          {zh:'在线', en:'online'},
+  'stat.off':         {zh:'离线', en:'offline'},
+  'stat.none':        {zh:'未启用', en:'disabled'},
+  'th.proxy':         {zh:'代理地址', en:'Proxy'},
+  'th.proto':         {zh:'协议', en:'Proto'},
+  'th.score':         {zh:'评分', en:'Score'},
+  'th.source':        {zh:'来源', en:'Source'},
+  'th.region':        {zh:'地域', en:'Region'},
+  'th.anonymous':     {zh:'匿名度', en:'Anon'},
+  'th.speed':         {zh:'延迟(s)', en:'Latency(s)'},
+  'th.tier':          {zh:'延迟档', en:'Tier'},
+  'th.protocol':      {zh:'协议', en:'Protocol'},
+  'th.stat':          {zh:'校验', en:'Checks'},
+  'th.time':          {zh:'最后校验', en:'Last check'},
+  'th.until':         {zh:'解禁时间', en:'Release at'},
+  'th.fail':          {zh:'连续失败', en:'Consec. fails'},
+  'th.op':            {zh:'操作', en:'Actions'},
+  'th.fetched':       {zh:'累计采集', en:'Fetched'},
+  'th.lastrun':       {zh:'最近运行', en:'Last run'},
+  'th.class':         {zh:'实现类', en:'Class'},
+  'th.total':         {zh:'合计', en:'Total'},
+  'th.removed':       {zh:'移除', en:'Remove'},
+  'common.total':     {zh:'合计 {n}', en:'Total {n}'},
+  'common.delete':    {zh:'删除', en:'Delete'},
+  'common.reset':     {zh:'重置', en:'Reset'},
+  'common.editUrl':   {zh:'改 URL', en:'Edit URL'},
+  'common.prev':      {zh:'上一页', en:'Prev'},
+  'common.next':      {zh:'下一页', en:'Next'},
+  'common.noData':    {zh:'暂无数据', en:'No data'},
+  'common.save':      {zh:'保存本组', en:'Save group'},
+  'flt.source':       {zh:'采集源', en:'Source'},
+  'flt.region':       {zh:'地区(CN)', en:'Region (CN)'},
+  'flt.scoreMin':     {zh:'最低分', en:'Min score'},
+  'flt.scoreMax':     {zh:'最高分', en:'Max score'},
+  'flt.tierAll':      {zh:'全部延迟档', en:'All tiers'},
+  'flt.protocolAll':  {zh:'全部协议', en:'All protocols'},
+  'proto.http':       {zh:'HTTP', en:'HTTP'},
+  'proto.socks5':     {zh:'SOCKS5', en:'SOCKS5'},
+  'proto.socks4':     {zh:'SOCKS4', en:'SOCKS4'},
+  'tier.fast':        {zh:'快', en:'Fast'},
+  'tier.medium':      {zh:'中', en:'Medium'},
+  'tier.slow':        {zh:'慢', en:'Slow'},
+  'tier.unknown':     {zh:'未知', en:'Unknown'},
+  'flt.https':        {zh:'仅 HTTPS', en:'HTTPS only'},
+  'black.ph':         {zh:'1.2.3.4:8080', en:'1.2.3.4:8080'},
+  'black.add':        {zh:'拉黑', en:'Block'},
+  'black.clear':      {zh:'清空黑名单', en:'Clear blacklist'},
+  'act.clearPool':    {zh:'清空代理池', en:'Clear pool'},
+  'proc.fetchLast':   {zh:'上次采集', en:'Last fetch'},
+  'proc.checkLast':   {zh:'上次校验', en:'Last check'},
+  'proc.queue':       {zh:'队列积压', en:'Queue depth'},
+  'proc.uptime':      {zh:'运行时长', en:'Uptime'},
+  'proc.tripped':     {zh:'熔断中的采集源', en:'Tripped sources'},
+  'proc.noTripped':   {zh:'无', en:'None'},
+  'proc.paused':      {zh:'已暂停', en:'paused'},
+  'proc.running':     {zh:'运行中', en:'running'},
+  'proc.pause':       {zh:'暂停采集', en:'Pause fetch'},
+  'proc.resume':      {zh:'恢复采集', en:'Resume fetch'},
+  'proc.progress':    {zh:'任务进度', en:'Task progress'},
+  'proc.noProgress':  {zh:'暂无任务记录', en:'No task records'},
+  'proc.stale':       {zh:'已中断', en:'stale'},
+  'proc.finished':    {zh:'已完成', en:'finished'},
+  'proc.fetch':       {zh:'采集', en:'Fetch'},
+  'proc.check':       {zh:'队列校验', en:'Queue check'},
+  'proc.recheck':     {zh:'存量复检', en:'Recheck'},
+  'cfg.tip':          {zh:'修改后立即生效（标注"需重启"的项除外）。密码类输入框留空表示不修改。',
+                       en:'Takes effect immediately (except items marked restart). Leave password fields empty to keep current value.'},
+  'cfg.resetAll':     {zh:'重置全部配置', en:'Reset all'},
+  'cfg.confirmReset': {zh:'确认把所有配置恢复为默认值？', en:'Reset all settings to defaults?'},
+  'cfg.restart':      {zh:'需重启生效', en:'requires restart'},
+  'cfg.nochange':     {zh:'没有需要保存的修改', en:'Nothing to save'},
+  'cfg.saved':        {zh:'配置已保存', en:'Saved'},
+  'alerts.clear':     {zh:'清空告警', en:'Clear alerts'},
+  'alerts.empty':     {zh:'暂无告警', en:'No alerts'},
+  'logs.search':      {zh:'搜索日志', en:'Search logs'},
+  'logs.clear':       {zh:'清空日志', en:'Clear logs'},
+  'logs.empty':       {zh:'暂无日志', en:'No logs'},
+  'msg.updated':      {zh:'已更新', en:'Updated'},
+  'msg.deleted':      {zh:'已删除', en:'Deleted'},
+  'msg.deletedN':     {zh:'已删除 {n} 条', en:'Deleted {n}'},
+  'msg.cleared':      {zh:'已清空', en:'Cleared'},
+  'msg.triggered':    {zh:'已触发', en:'Triggered'},
+  'msg.paused':       {zh:'采集已暂停', en:'Fetching paused'},
+  'msg.resumed':      {zh:'采集已恢复', en:'Fetching resumed'},
+  'msg.saved':        {zh:'已保存', en:'Saved'},
+  'msg.confirmDel':   {zh:'确认删除所选 {n} 条代理？', en:'Delete {n} selected proxies?'},
+  'msg.selectFirst':  {zh:'请先勾选要删除的代理', en:'Select proxies first'},
+  'msg.needIpPort':   {zh:'请输入 ip:port 格式的代理地址', en:'Enter proxy as ip:port'},
+  'msg.confirmReset': {zh:'确认把所有配置恢复为默认值？', en:'Reset all settings to defaults?'},
+  'status.enabled':   {zh:'启用', en:'On'},
+  'status.disabled':  {zh:'停用', en:'Off'},
+  'status.custom':    {zh:'自定义', en:'Custom'},
+  'status.tripped':   {zh:'熔断中', en:'tripped'},
+  'status.ok':        {zh:'正常', en:'OK'},
+  'status.bad':       {zh:'失败', en:'Fail'},
+  'anon.high':        {zh:'高匿', en:'high'},
+  'anon.transparent': {zh:'透明', en:'transparent'},
+  'anon.unknown':     {zh:'未知', en:'unknown'},
+  'err.login':        {zh:'登录失败，请检查密码', en:'Login failed, check your password'},
+  'err.network':      {zh:'网络错误，请稍后重试', en:'Network error, retry later'},
+  'err.session':      {zh:'会话已过期，请重新登录', en:'Session expired, sign in again'}
+};
+
+var LANG = localStorage.getItem('fpp_lang') || 'zh';
+var TOKEN = localStorage.getItem('fpp_token') || '';
+var CSRF  = localStorage.getItem('fpp_csrf') || '';
+var loggedIn = false, currentView = 'overview', proxyPage = 1, blackPage = 1;
+var configData = [], logCache = [];
+
+function t(key, vars){
+  var entry = I18N[key];
+  var out = entry ? (entry[LANG] || entry.zh) : key;
+  if(vars){ for(var k in vars){ out = out.replace('{'+k+'}', vars[k]); } }
+  return out;
+}
+function toggleLang(){
+  LANG = (LANG==='zh') ? 'en' : 'zh';
+  localStorage.setItem('fpp_lang', LANG);
+  applyI18n();
+  if(loggedIn) refreshView();
+}
+function applyI18n(){
+  document.querySelectorAll('[data-i18n]').forEach(function(el){ el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(function(el){ el.placeholder = t(el.dataset.i18nPh); });
+  document.querySelectorAll('[data-i18n-opt]').forEach(function(el){ el.textContent = t(el.dataset.i18nOpt); });
+  document.documentElement.lang = (LANG==='en') ? 'en' : 'zh-CN';
+  document.title = t('app.title');
+  document.getElementById('langBtn').textContent = (LANG==='zh') ? 'EN' : '中';
+  document.getElementById('langBtnLogin').textContent = (LANG==='zh') ? 'English' : '中文';
+  document.getElementById('viewTitle').textContent = t('nav.'+currentView);
+  var logout = document.getElementById('logoutBtn');
+  if(logout){ logout.onclick = doLogout; }
+}
+
+/* ---------- HTTP ---------- */
+function api(path, opts){
+  opts = opts || {};
+  opts.headers = Object.assign({'X-Admin-Token':TOKEN,'X-CSRF-Token':CSRF}, opts.headers||{});
+  if(opts.body && typeof opts.body === 'object'){
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(opts.body);
+  }
+  return fetch('/admin'+path, opts).then(function(r){
+    if(r.status === 401){ return {code:401, message:t('err.session')}; }
+    return r.json();
+  }).then(function(d){
+    if(d.code === 401 || (d.code === 1 && /CSRF/i.test(d.message||''))){
+      localStorage.removeItem('fpp_token');
+      localStorage.removeItem('fpp_csrf');
+      TOKEN = ''; loggedIn = false;
+      document.getElementById('app').style.display = 'none';
+      document.getElementById('login').style.display = 'flex';
+      throw new Error(t('err.session'));
+    }
+    if(d.code !== 0) throw new Error(d.message || 'error');
+    return d.data;
+  });
+}
+
+function toast(msg, type){
+  var box = document.getElementById('toast');
+  var el = document.createElement('div');
+  el.className = 'toast ' + (type || 'success');
+  el.textContent = msg;               /* textContent：天然免疫注入 */
+  box.appendChild(el);
+  setTimeout(function(){ el.remove(); }, 2600);
+}
+
+/* ---------- 登录 / 改密 ---------- */
+function doLogin(){
+  var pwd = document.getElementById('loginPwd').value;
+  var errBox = document.getElementById('loginError');
+  errBox.textContent = '';
+  if(!pwd){ errBox.textContent = t('login.subtitle'); return; }
+  fetch('/admin/api/login', {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({password: pwd})
+  }).then(function(r){ return r.json(); }).then(function(d){
+    if(d.code !== 0){ errBox.textContent = d.message || t('err.login'); return; }
+    TOKEN = d.data.token; CSRF = d.data.csrf_token;
+    localStorage.setItem('fpp_token', TOKEN);
+    localStorage.setItem('fpp_csrf', CSRF);
+    document.getElementById('loginPwd').value = '';
+    document.getElementById('verText').textContent = 'v' + (d.data.version || '');
+    if(d.data.must_change_password){ showPasswordDialog(); return; }
+    enterApp();
+  }).catch(function(){ errBox.textContent = t('err.network'); });
+}
+
+function enterApp(){
+  loggedIn = true;
+  document.getElementById('login').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  loadOverview();
+}
+
+function showPasswordDialog(){
+  document.getElementById('pwdDialog').style.display = 'block';
+}
+function submitPassword(){
+  var p1 = document.getElementById('pwdNew').value;
+  var p2 = document.getElementById('pwdNew2').value;
+  var err = document.getElementById('pwdError');
+  err.textContent = '';
+  if(p1 !== p2){ err.textContent = 'password mismatch'; return; }
+  api('/api/config', {method:'POST', body:{updates:{ADMIN_PASSWORD:p1}}})
+    .then(function(){
+      document.getElementById('pwdDialog').style.display = 'none';
+      document.getElementById('pwdNew').value = '';
+      document.getElementById('pwdNew2').value = '';
+      toast(t('msg.saved'));
+      /* 后端会踢除其他会话，当前会话保留 */
+    })
+    .catch(function(e){ err.textContent = e.message; });
+}
+function doLogout(){
+  api('/api/logout', {method:'POST'}).catch(function(){}).then(function(){
+    localStorage.removeItem('fpp_token');
+    localStorage.removeItem('fpp_csrf');
+    TOKEN = ''; loggedIn = false;
+    location.reload();
+  });
+}
+
+/* ---------- 导航 ---------- */
+function switchView(view, el){
+  currentView = view;
+  document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('active'); });
+  document.getElementById('view-'+view).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.remove('active'); });
+  if(el) el.classList.add('active');
+  document.getElementById('viewTitle').textContent = t('nav.'+view);
+  refreshView();
+}
+function refreshView(){
+  if(!loggedIn) return;
+  ({
+    overview: loadOverview, proxies: function(){loadProxies(proxyPage);},
+    blacklist: function(){loadBlacklist();}, fetchers: loadFetchers,
+    process: loadProcessStatus, config: loadConfig,
+    alerts: loadAlerts, logs: loadLogs
+  }[currentView] || function(){})();
+}
+
+/* ---------- 概览 ---------- */
+function loadOverview(){
+  api('/api/overview').then(function(d){
+    var h = document.getElementById('statGrid');
+    h.innerHTML =
+      card(t('stat.pool'), d.pool.total, '') +
+      card(t('stat.https'), d.pool.https, 'green') +
+      card(t('stat.fetcher'), d.fetchers.enabled + ' / ' + d.fetchers.total, '') +
+      card(t('stat.blacklist'), (d.health||{}).blacklist_total || 0, '') +
+      card(t('stat.queue'), (d.health||{}).queue_depth, '') +
+      flag(t('stat.redis'), (d.health||{}).redis, t('stat.none')) +
+      flag(t('stat.mysql'), (d.health||{}).mysql, t('stat.none'));
+
+    var f = document.getElementById('fetcherStats');
+    f.innerHTML = '<table><thead><tr>'+
+      th(t('th.source'))+th(t('th.protocol'))+th(t('stat.on'))+th(t('th.fetched'))+th(t('th.lastrun'))+
+      '</tr></thead><tbody>'+
+      (d.fetchers_list||[]).map(function(x){
+        return '<tr><td><b>'+esc(x.name)+'</b></td>'+
+          '<td>'+protocolBadge(x.protocol)+'</td>'+
+          '<td>'+(x.enabled?'<span class="badge badge-green">'+esc(t('status.enabled'))+'</span>'
+                        :'<span class="badge badge-gray">'+esc(t('status.disabled'))+'</span>')+'</td>'+
+          '<td>'+esc(x.stat.total)+'</td><td>'+esc(x.stat.last_run||'-')+'</td></tr>';
+      }).join('') + '</tbody></table>';
+
+    var r = document.getElementById('regionStats');
+    var entries = Object.keys(d.regions||{}).sort(function(a,b){
+      return d.regions[b]-d.regions[a];
+    }).slice(0,20);
+    r.innerHTML = entries.length
+      ? '<table><thead><tr>'+th(t('th.region'))+th(t('th.total'))+'</tr></thead><tbody>'+
+        entries.map(function(k){
+          return '<tr><td>'+esc(k)+'</td><td>'+esc(d.regions[k])+'</td></tr>';
+        }).join('')+'</tbody></table>'
+      : '<div class="empty">'+esc(t('common.noData'))+'</div>';
+
+    /* 延迟分层分布（借鉴 docs/09 P0-3） */
+    var t = document.getElementById('tierStats');
+    var tiers = d.tiers||{};
+    var tierKeys = ['fast','medium','slow','unknown'];
+    var tierTotal = tierKeys.reduce(function(s,k){ return s + (tiers[k]||0); }, 0);
+    t.innerHTML = tierTotal
+      ? '<table><thead><tr>'+th(t('th.tier'))+th(t('th.total'))+'</tr></thead><tbody>'+
+        tierKeys.map(function(k){
+          var n = tiers[k]||0;
+          var pct = tierTotal ? Math.round(n*100/tierTotal) : 0;
+          return '<tr><td>'+tierBadge(k)+'</td><td>'+esc(n)+' ('+esc(pct)+'%)</td></tr>';
+        }).join('')+'</tbody></table>'
+      : '<div class="empty">'+esc(t('common.noData'))+'</div>';
+
+    /* 传输协议分布（借鉴 docs/09 P0-1） */
+    var ps = document.getElementById('protocolStats');
+    var protos = d.protocols||{};
+    var protoKeys = ['http','socks5','socks4'];
+    var protoTotal = protoKeys.reduce(function(s,k){ return s + (protos[k]||0); }, 0);
+    ps.innerHTML = protoTotal
+      ? '<table><thead><tr>'+th(t('th.protocol'))+th(t('th.total'))+'</tr></thead><tbody>'+
+        protoKeys.map(function(k){
+          var n = protos[k]||0;
+          var pct = protoTotal ? Math.round(n*100/protoTotal) : 0;
+          return '<tr><td>'+protocolBadge(k)+'</td><td>'+esc(n)+' ('+esc(pct)+'%)</td></tr>';
+        }).join('')+'</tbody></table>'
+      : '<div class="empty">'+esc(t('common.noData'))+'</div>';
+
+    /* 长任务进度（借鉴 docs/09 P1-3） */
+    renderProgress(d.progress || {}, 'progressStats');
+  }).catch(function(e){ toast(e.message,'error'); });
+}
+function card(label, value, cls){
+  return '<div class="stat-card"><div class="label">'+esc(label)+'</div>'+
+         '<div class="value '+esc(cls||'')+'">'+esc(value)+'</div></div>';
+}
+function flag(label, on, offText){
+  return '<div class="stat-card"><div class="label">'+esc(label)+'</div>'+
+    '<div class="value" style="font-size:15px">'+
+    (on ? '<span class="badge badge-green">'+esc(t('stat.on'))+'</span>'
+        : '<span class="badge badge-red">'+esc(offText||t('stat.off'))+'</span>')+'</div></div>';
+}
+function th(x){ return '<th>'+esc(x)+'</th>'; }
+
+/* 延迟分层标签（fast / medium / slow / unknown） */
+var TIER_CLASS = {fast:'badge-green', medium:'badge-blue', slow:'badge-amber',
+                  unknown:'badge-gray'};
+function tierBadge(tier){
+  var key = String(tier||'unknown');
+  return '<span class="badge '+(TIER_CLASS[key]||'badge-gray')+'">'+esc(t('tier.'+key))+'</span>';
+}
+
+/* 传输协议标签（http / socks5 / socks4） */
+var PROTO_CLASS = {http:'badge-gray', socks5:'badge-green', socks4:'badge-blue'};
+function protocolBadge(proto){
+  var key = String(proto||'http');
+  return '<span class="badge '+(PROTO_CLASS[key]||'badge-gray')+'">'+esc(t('proto.'+key))+'</span>';
+}
+
+/* ---------- 代理池 ---------- */
+function loadProxies(page){
+  proxyPage = page || 1;
+  var q = new URLSearchParams({page: proxyPage, size: 50});
+  var src = document.getElementById('qSource').value.trim();
+  var reg = document.getElementById('qRegion').value.trim();
+  var smin = document.getElementById('qScoreMin').value;
+  var smax = document.getElementById('qScoreMax').value;
+  var tier = document.getElementById('qTier').value;
+  var protocol = document.getElementById('qProtocol').value;
+  if(src) q.set('source', src);
+  if(reg) q.set('region', reg);
+  if(smin !== '') q.set('score_min', smin);
+  if(smax !== '') q.set('score_max', smax);
+  if(tier) q.set('tier', tier);
+  if(protocol) q.set('protocol', protocol);
+  if(document.getElementById('qHttps').checked) q.set('https','1');
+
+  api('/api/proxies?' + q.toString()).then(function(d){
+    var box = document.getElementById('proxyTable');
+    if(!d.items.length){
+      box.innerHTML = '<div class="empty">'+esc(t('common.noData'))+'</div>';
+      document.getElementById('proxyPager').innerHTML = '';
+      return;
+    }
+    box.innerHTML = '<table><thead><tr>'+
+      '<th style="width:28px"><input type="checkbox" onclick="toggleAll(this)"></th>'+
+      th(t('th.proxy'))+th(t('th.proto'))+th(t('th.score'))+th(t('th.source'))+
+      th(t('th.region'))+th(t('th.anonymous'))+th(t('th.speed'))+th(t('th.tier'))+
+      th(t('th.protocol'))+
+      th(t('th.stat'))+
+      th(t('th.time'))+th(t('th.op'))+'</tr></thead><tbody>'+
+      d.items.map(function(p){
+        return '<tr><td><input type="checkbox" class="pcb" value="'+esc(p.proxy)+'"></td>'+
+          '<td class="mono">'+esc(p.proxy)+'</td>'+
+          '<td>'+(p.https?'<span class="badge badge-green">HTTPS</span>'
+                        :'<span class="badge badge-blue">HTTP</span>')+'</td>'+
+          '<td>'+esc(p.score)+'</td>'+
+          '<td>'+String(p.source||'').split('/').filter(Boolean).map(function(s){
+                return '<span class="tag">'+esc(s)+'</span>'; }).join('')+'</td>'+
+          '<td>'+esc(p.region||'-')+'</td>'+
+          '<td>'+esc(anonText(p.anonymous))+'</td>'+
+          '<td>'+esc(p.speed)+'</td>'+
+          '<td>'+tierBadge(p.tier)+'</td>'+
+          '<td>'+protocolBadge(p.protocol)+'</td>'+
+          '<td>'+esc(p.fail_count)+'/'+esc(p.check_count)+'</td>'+
+          '<td>'+esc(p.last_time||'-')+'</td>'+
+          '<td><button class="btn btn-danger btn-sm" onclick="delOne('+escArg(p.proxy)+')">'+esc(t('common.delete'))+'</button></td>'+
+        '</tr>';
+      }).join('')+'</tbody></table>';
+
+    var pages = Math.max(1, Math.ceil(d.total/d.size));
+    document.getElementById('proxyPager').innerHTML =
+      '<button class="btn btn-ghost btn-sm" onclick="loadProxies('+(proxyPage-1)+')"'+
+      (proxyPage<=1?' disabled':'')+'>'+esc(t('common.prev'))+'</button>'+
+      '<span class="hint">'+esc(proxyPage)+' / '+esc(pages)+' · '+esc(t('common.total',{n:d.total}))+'</span>'+
+      '<button class="btn btn-ghost btn-sm" onclick="loadProxies('+(proxyPage+1)+')"'+
+      (proxyPage>=pages?' disabled':'')+'>'+esc(t('common.next'))+'</button>';
+  }).catch(function(e){ toast(e.message,'error'); });
+}
+function anonText(v){
+  if(v === 'high') return t('anon.high');
+  if(v === 'transparent') return t('anon.transparent');
+  return t('anon.unknown');
+}
+function toggleAll(cb){
+  document.querySelectorAll('.pcb').forEach(function(c){ c.checked = cb.checked; });
+}
+function selectedProxies(){
+  return Array.prototype.map.call(
+    document.querySelectorAll('.pcb:checked'), function(c){ return c.value; });
+}
+function delOne(proxy){
+  api('/api/proxies/delete', {method:'POST', body:{proxy: proxy}})
+    .then(function(){ toast(t('msg.deleted')); loadProxies(proxyPage); })
+    .catch(function(e){ toast(e.message,'error'); });
+}
+function batchDelete(){
+  var sel = selectedProxies();
+  if(!sel.length){ toast(t('msg.selectFirst'),'error'); return; }
+  if(!confirm(t('msg.confirmDel',{n:sel.length}))) return;
+  api('/api/proxies/batch_delete', {method:'POST', body:{proxies: sel}})
+    .then(function(d){ toast(t('msg.deletedN',{n: sel.length - (d.failed||[]).length})); loadProxies(proxyPage); })
+    .catch(function(e){ toast(e.message,'error'); });
+}
+function clearPool(){
+  if(!confirm(t('act.clearPool')+'?')) return;
+  api('/api/pool/clear', {method:'POST'})
+    .then(function(){ toast(t('msg.cleared')); loadProxies(1); })
+    .catch(function(e){ toast(e.message,'error'); });
+}
+
+/* ---------- 黑名单（死代理退避缓存） ---------- */
+function loadBlacklist(){
+  api('/api/blacklist?page='+blackPage+'&size=100').then(function(d){
+    var box = document.getElementById('blackTable');
+    box.innerHTML = d.items.length
+      ? '<table><thead><tr>'+th(t('th.proxy'))+th(t('th.until'))+th(t('th.fail'))+
+        th(t('th.op'))+'</tr></thead><tbody>'+
+        d.items.map(function(b){
+          var dt = new Date((b.blocked_until||0)*1000);
+          return '<tr><td class="mono">'+esc(b.proxy)+'</td>'+
+            '<td>'+esc(dt.toLocaleString())+'</td>'+
+            '<td>'+esc(b.fail_count||0)+'</td>'+
+            '<td><button class="btn btn-danger btn-sm" onclick="removeBlack('+escArg(b.proxy)+')">'+
+            esc(t('common.delete'))+'</button></td></tr>';
+        }).join('')+'</tbody></table>'
+      : '<div class="empty">'+esc(t('common.noData'))+'</div>';
+    document.getElementById('blackPager').innerHTML =
+      '<button class="btn btn-ghost btn-sm" onclick="loadBlacklist('+(blackPage-1)+')"'+
+      (blackPage<=1?' disabled':'')+'>'+esc(t('common.prev'))+'</button>'+
+      '<span class="hint">'+esc(blackPage)+' · '+esc(t('common.total',{n:d.total}))+'</span>'+
+      '<button class="btn btn-ghost btn-sm" onclick="loadBlacklist('+(blackPage+1)+')">'+esc(t('common.next'))+'</button>';
+  }).catch(function(e){ toast(e.message,'error'); });
+}
+function addBlack(){
+  var p = document.getElementById('blackProxyInput').value.trim();
+  if(!p){ toast(t('msg.needIpPort'),'error'); return; }
+  api('/api/blacklist/add', {method:'POST', body:{proxy:p}})
+    .then(function(){ toast(t('msg.updated')); document.getElementById('blackProxyInput').value=''; loadBlacklist(); })
+    .catch(function(e){ toast(e.message,'error'); });
+}
+function removeBlack(p){
+  api('/api/blacklist/remove', {method:'POST', body:{proxy:p}})
+    .then(function(){ toast(t('msg.updated')); loadBlacklist(); })
+    .catch(function(e){ toast(e.message,'error'); });
+}
+function clearBlacklist(){
+  api('/api/blacklist/clear', {method:'POST'})
+    .then(function(){ toast(t('msg.cleared')); loadBlacklist(); })
+    .catch(function(e){ toast(e.message,'error'); });
+}
+
+/* ---------- 采集源 ---------- */
+function loadFetchers(){
+  api('/api/fetchers').then(function(list){
+    document.getElementById('fetcherTable').innerHTML =
+      '<table><thead><tr>'+th(t('th.source'))+th(t('th.class'))+th(t('status.enabled'))+
+      th(t('th.fetched'))+th(t('th.lastrun'))+th(t('th.op'))+'</tr></thead><tbody>'+
+      list.map(function(f){
+        var tripped = !!f.stat.tripped_until;
+        return '<tr><td><b>'+esc(f.name)+'</b>'+
+          (tripped?' <span class="badge badge-red">'+esc(t('status.tripped'))+'</span>':'')+
+          (f.status_note?'<div class="hint">'+esc(f.status_note)+'</div>':'')+'</td>'+
+          '<td class="hint">'+esc(f.class)+'</td>'+
+          '<td><label class="switch"><input type="checkbox" '+(f.enabled?'checked':'')+
+          ' onchange="toggleFetcher('+escArg(f.name)+',this.checked)"><span class="slider"></span></label></td>'+
+          '<td>'+esc(f.stat.total)+'</td>'+
+          '<td>'+esc(f.stat.last_run||'-')+'</td>'+
+          '<td><button class="btn btn-ghost btn-sm" onclick="editUrls('+escArg(f.name)+')">'+
+          esc(t('common.editUrl'))+'</button> <button class="btn btn-ghost btn-sm" onclick="resetFetcher('+
+          escArg(f.name)+')">'+esc(t('common.reset'))+'</button></td></tr>';
+      }).join('')+'</tbody></table>';
+  }).catch(function(e){ toast(e.message,'error'); });
+}
+function toggleFetcher(name, enabled){
+  api('/api/fetchers', {method:'POST', body:{name:name, enabled:enabled}})
+    .then(function(){ toast(t('msg.updated')); })
+    .catch(function(e){ toast(e.message,'error'); loadFetchers(); });
+}
+function editUrls(name){
+  api('/api/fetchers').then(function(list){
+    var f = list.filter(function(x){ return x.name === name; })[0];
+    var current = f && f.urls_override ? f.urls_override.join('\n') : '';
+    var entered = prompt(t('common.editUrl') + ' (' + name + ')', current);
+    if(entered === null) return;
+    var urls = entered.split('\n').map(function(s){ return s.trim(); })
+                    .filter(function(s){ return s; });
+    api('/api/fetchers', {method:'POST', body:{name:name, urls:urls}})
+      .then(function(){ toast(t('msg.updated')); loadFetchers(); })
+      .catch(function(e){ toast(e.message,'error'); });
+  });
+}
+function resetFetcher(name){
+  api('/api/fetchers/reset', {method:'POST', body:{name:name}})
+    .then(function(){ toast(t('msg.updated')); loadFetchers(); })
+    .catch(function(e){ toast(e.message,'error'); });
+}
+
+/* ---------- 运行状态 ---------- */
+function loadProcessStatus(){
+  api('/api/process/status').then(function(d){
+    document.getElementById('procGrid').innerHTML =
+      card(t('proc.fetchLast'), (d.fetch_last||'-').slice(5) || '-', '') +
+      card(t('proc.fetchLast')+' ('+t('th.total')+')', d.fetch_count, '') +
+      card(t('proc.checkLast'), (d.check_last||'-').slice(5) || '-', '') +
+      card(t('proc.checkLast')+' ('+t('th.total')+')', d.check_count, '') +
+      card(t('proc.queue'), d.queue_depth, '') +
+      card(t('proc.uptime'), Math.round(d.uptime_seconds/60)+' min', '') +
+      '<div class="stat-card"><div class="label">'+esc(t('nav.process'))+'</div>'+
+        '<div class="value" style="font-size:15px">'+
+        (d.fetcher_paused ? '<span class="badge badge-red">'+esc(t('proc.paused'))+'</span>'
+                          : '<span class="badge badge-green">'+esc(t('proc.running'))+'</span>')+
+        '</div></div>';
+    document.getElementById('procGrid').innerHTML +=
+      '<div class="stat-card"><div class="label">'+esc(t('nav.fetchers'))+'</div>'+
+      '<button class="btn btn-sm" onclick="togglePause()">'+
+      (d.fetcher_paused?esc(t('proc.resume')):esc(t('proc.pause')))+'</button></div>';
+
+    var down = d.tripped_list || [];
+    document.getElementById('downList').innerHTML = down.length
+      ? down.map(function(n){ return '<span class="badge badge-red">'+esc(n)+'</span>'; }).join(' ')
+      : '<span class="hint">'+esc(t('proc.noTripped'))+'</span>';
+
+    renderProgress(d.progress || {});
+  }).catch(function(e){ toast(e.message,'error'); });
+}
+
+/* 长任务进度条（借鉴 docs/09 P1-3） */
+var PROC_LABEL = {fetch:'proc.fetch', check:'proc.check', recheck:'proc.recheck'};
+function renderProgress(progress, targetId){
+  var box = document.getElementById(targetId || 'progressList');
+  if(!box) return;
+  var keys = Object.keys(progress || {});
+  if(!keys.length){
+    box.innerHTML = '<div class="empty">'+esc(t('proc.noProgress'))+'</div>';
+    return;
+  }
+  box.innerHTML = keys.map(function(k){
+    var p = progress[k] || {};
+    var pct = Number(p.progress_percent || 0);
+    var cls = p.stale ? 'stale' : (p.status === 'done' ? 'done' : '');
+    var badge = p.stale ? '<span class="badge badge-red">'+esc(t('proc.stale'))+'</span>'
+      : (p.status === 'running' ? '<span class="badge badge-blue">'+esc(t('proc.running'))+'</span>'
+      : '<span class="badge badge-green">'+esc(t('proc.finished'))+'</span>');
+    var label = t(PROC_LABEL[k] || 'proc.progress');
+    var counts = (p.total ? (p.checked||0) + ' / ' + p.total : (p.checked||0));
+    var secs = Math.round(Number(p.elapsed_seconds||0));
+    return '<div>'+
+      '<div class="prow"><span>'+esc(label)+' '+badge+'</span>'+
+        '<span>'+esc(counts)+' · '+esc(pct)+'% · '+esc(secs)+'s</span></div>'+
+      '<div class="pbar '+cls+'"><i style="width:'+Math.max(0,Math.min(100,pct))+'%"></i></div>'+
+      (p.message ? '<div class="hint">'+esc(p.message)+'</div>' : '')+
+      '</div>';
+  }).join('');
+}
+function togglePause(){
+  api('/api/process/status').then(function(d){
+    var next = !d.fetcher_paused;
+    api('/api/config', {method:'POST', body:{updates:{FETCHER_PAUSED: next}}})
+      .then(function(){ toast(next?t('msg.paused'):t('msg.resumed')); loadProcessStatus(); })
+      .catch(function(e){ toast(e.message,'error'); });
+  });
+}
+function doTrigger(processor){
+  api('/api/trigger', {method:'POST', body:{processor: processor}})
+    .then(function(){ toast(t('msg.triggered') + ' ' + processor); })
+    .catch(function(e){ toast(e.message,'error'); });
+}
+
+/* ---------- 配置 ---------- */
+function loadConfig(){
+  api('/api/config').then(function(list){
+    configData = list;
+    var groups = {};
+    list.forEach(function(i){ (groups[i.group] = groups[i.group] || []).push(i); });
+    var html = '';
+    Object.keys(groups).forEach(function(g){
+      var label = groups[g][0].group_label;
+      if(LANG === 'en'){ label = groups[g][0].group_label_en || label; }
+      html += '<h3 style="margin:16px 0 8px;font-size:13px;color:var(--text2)">'+esc(label)+'</h3>';
+      groups[g].forEach(function(i){ html += configRow(i); });
+      html += '<div class="row" style="justify-content:flex-end">'+
+              '<button class="btn btn-primary btn-sm" onclick="saveGroup('+escArg(g)+')">'+
+              esc(t('common.save'))+'</button></div>';
+    });
+    document.getElementById('configGroups').innerHTML = html;
+  }).catch(function(e){ toast(e.message,'error'); });
+}
+function configRow(i){
+  var v = i.value;
+  var desc = (LANG === 'en') ? (i.desc_en || i.desc) : i.desc;
+  var input;
+  if(i.type === 'bool'){
+    input = '<label class="switch"><input type="checkbox" data-key="'+esc(i.key)+'" '+
+            (v?'checked':'')+'><span class="slider"></span></label>';
+  } else if(i.choices){
+    input = '<select data-key="'+esc(i.key)+'">'+
+      i.choices.map(function(c){
+        return '<option '+(c===v?'selected':'')+'>'+esc(c)+'</option>'; }).join('')+'</select>';
+  } else {
+    /* 密码类：永不回填任何值（含掩码），留空 = 不修改 */
+    var shown = (i.type === 'password') ? '' : (v === null || v === undefined ? '' : v);
+    var ph = (i.type === 'password')
+      ? (i.has_value ? '•••••• (已设置，留空不修改)' : '(未设置)')
+      : '';
+    input = '<input type="'+(i.type==='int'||i.type==='float'?'number':'text')+'" '+
+            'data-key="'+esc(i.key)+'" value="'+esc(shown)+'" placeholder="'+esc(ph)+'"'+
+            (i.min!==undefined?' min="'+esc(i.min)+'"':'')+
+            (i.max!==undefined?' max="'+esc(i.max)+'"':'')+'>';
+  }
+  return '<div class="row"><div style="flex:0 0 230px"><label class="mono">'+esc(i.key)+'</label>'+
+    '<div class="hint">'+esc(desc)+(i.secure?' <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>':'')+'</div></div>'+
+    '<div style="flex:1">'+input+
+    (i.require_restart?'<div class="hint">'+esc(t('cfg.restart'))+'</div>':'')+'</div></div>';
+}
+function saveGroup(g){
+  var updates = {};
+  document.querySelectorAll('[data-key]').forEach(function(el){
+    var k = el.dataset.key;
+    var meta = configData.filter(function(c){ return c.key === k; })[0];
+    if(!meta || meta.group !== g) return;
+    var val = (meta.type === 'bool') ? el.checked : el.value;
+    if(meta.type === 'password' && val === '') return;   /* 留空不修改 */
+    updates[k] = val;
+  });
+  if(!Object.keys(updates).length){ toast(t('cfg.nochange'),'error'); return; }
+  api('/api/config', {method:'POST', body:{updates: updates}})
+    .then(function(){ toast(t('cfg.saved')); loadConfig(); })
+    .catch(function(e){ toast(e.message,'error'); });
+}
+function resetConfig(){
+  api('/api/config/reset', {method:'POST', body:{}})
+    .then(function(){ toast(t('msg.cleared')); loadConfig(); })
+    .catch(function(e){ toast(e.message,'error'); });
+}
+
+/* ---------- 告警 / 日志 ---------- */
+function loadAlerts(){
+  api('/api/alerts?limit=200').then(function(list){
+    var box = document.getElementById('alertBox');
+    box.textContent = (list && list.length) ? list.join('\n') : t('alerts.empty');
+  }).catch(function(e){ toast(e.message,'error'); });
+}
+function clearAlerts(){
+  api('/api/alerts/clear', {method:'POST'})
+    .then(function(){ toast(t('msg.cleared')); loadAlerts(); })
+    .catch(function(e){ toast(e.message,'error'); });
+}
+function loadLogs(){
+  api('/api/logs?limit=500&level=' + encodeURIComponent(
+      document.getElementById('logLevel').value)).then(function(list){
+    logCache = list || [];
+    renderLogs();
+  }).catch(function(e){ toast(e.message,'error'); });
+}
+function renderLogs(){
+  var kw = document.getElementById('logSearch').value.toLowerCase();
+  var lines = logCache;
+  if(kw) lines = logCache.filter(function(l){ return l.toLowerCase().indexOf(kw) >= 0; });
+  var box = document.getElementById('logBox');
+  /* 日志内容一律走 textContent —— 不解析任何 HTML */
+  box.textContent = lines.length ? lines.join('\n') : t('logs.empty');
+}
+function clearLogs(){
+  api('/api/logs/clear', {method:'POST'})
+    .then(function(){ toast(t('msg.cleared')); logCache = []; renderLogs(); })
+    .catch(function(e){ toast(e.message,'error'); });
+}
+
+/* ---------- 启动 ---------- */
+document.addEventListener('DOMContentLoaded', function(){
+  applyI18n();
+  if(TOKEN){
+    api('/api/overview').then(function(d){
+      document.getElementById('verText').textContent = 'v' + (d.version || '');
+      enterApp();
+    }).catch(function(){
+      localStorage.removeItem('fpp_token');
+      localStorage.removeItem('fpp_csrf');
+      TOKEN = '';
+    });
+  }
+});
+</script>
+</body>
+</html>

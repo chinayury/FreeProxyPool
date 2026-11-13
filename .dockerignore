@@ -1,0 +1,38 @@
+# 构建镜像与运行时的忽略清单
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 运行期产物
+logs/
+*.log
+
+# 本地配置（含口令，绝不入库）
+.env
+
+# 自检缓存
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 编辑器 / 工具状态
+.idea/
+.vscode/
+*.swp
+.DS_Store
+.zcode/
+.github/
+
+# 旧版本快照目录
+v0.*/
+
+# 不进构建上下文：版本库历史
+# - .git/ ：镜像里不需要版本库历史
+# 必须保留的目录（排掉会让镜像构建必然失败）：
+# - src/   —— 全部源码（含 tests/ 与 tools/，checker 阶段自检直接 import）
+# - docs/  —— 自检的版本锚点门禁要读 docs/ 做"当前版本"校验
+.git/

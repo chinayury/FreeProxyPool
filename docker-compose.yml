@@ -1,0 +1,161 @@
+# FreeProxyPool 生产编排（v0.1.0）
+#
+#   redis / mysql      有状态依赖
+#   collector          采集服务（无状态，可多副本）
+#   validator          验证服务（无状态，可多副本）
+#   gateway            API 网关（无状态，支持 --scale gateway=N）
+#   scheduler          调度服务（单副本，多副本会重复执行复检/清理）
+#   nginx              统一入口
+#
+# 启动前必读：docs/02-环境部署教程.md「部署检查清单」。
+# 直接 `docker compose up` 会使用下面 .env.example 中的弱默认值，
+# 仅适用于本机试验；生产必须先复制 .env 并改掉口令与密钥。
+
+x-app-env: &app-env
+  TZ: Asia/Shanghai
+  DB_CONN: redis://:${REDIS_PASSWORD:-fpp_redis_2024}@redis:6379/0
+  MYSQL_ENABLED: "${MYSQL_ENABLED:-false}"
+  MYSQL_HOST: mysql
+  MYSQL_PORT: "3306"
+  MYSQL_USER: ${MYSQL_USER:-fpp}
+  MYSQL_PASSWORD: ${MYSQL_PASSWORD:-fpp_unused}
+  MYSQL_DB: ${MYSQL_DATABASE:-fpp}
+  # 安全底线：API 鉴权 + 管理口令
+  API_KEY: ${API_KEY:?API_KEY 必须设置，详见 .env.example}
+  ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD 必须设置，详见 .env.example}
+  # 只有当网关前置 Nginx 时才填 Nginx 所在网段；
+  # 留空表示完全不采信 X-Forwarded-For（更安全，登录爆破锁定不会被绕过）
+  TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+  METRICS_AUTH: "true"
+  ALERT_WEBHOOK: ${ALERT_WEBHOOK:-}
+  # 延迟分层阈值（毫秒）：< TIER_FAST_MS → fast，< TIER_MEDIUM_MS → medium，其余 slow
+  TIER_FAST_MS: ${TIER_FAST_MS:-500}
+  TIER_MEDIUM_MS: ${TIER_MEDIUM_MS:-2000}
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: fpp_redis
+    restart: always
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD:-fpp_redis_2024}
+      - --appendonly
+      - "yes"
+      - --maxmemory-policy
+      - noeviction
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-fpp_redis_2024}
+
+  mysql:
+    image: mysql:8.0
+    container_name: fpp_mysql
+    restart: always
+    # MySQL 只用于冷存储归档，默认关闭（MYSQL_ENABLED=false）。
+    # 不启动它时用 `docker compose up -d` 即可；需要归档时：
+    #     MYSQL_ENABLED=true docker compose --profile archive up -d
+    profiles: ["archive"]
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-fpp_root_unused}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-fpp}
+      MYSQL_USER: ${MYSQL_USER:-fpp}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-fpp_unused}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  collector:
+    build: {context: ., dockerfile: Dockerfile}
+    image: freeproxypool:0.1.0
+    container_name: fpp_collector
+    restart: always
+    command: ["python", "-m", "freeproxypool", "collector"]
+    depends_on:
+      redis: {condition: service_healthy}
+    environment: *app-env
+    # 健康检查：验证"应用能加载 + 能连上 Redis"——这正是采集服务的真实存活前提。
+    # 不要在这里跑 `proxyPool.py selftest`：自检依赖 httpx，而运行镜像按设计
+    # 不含测试依赖（requirements.txt 与 requirements-dev.txt 已分离），
+    # 早前版本正是因此把健康检查搞成了永远 unhealthy。
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import sys; from freeproxypool import config_center as cc; sys.exit(0 if cc.get_redis().ping() else 1)"]
+      interval: 60s
+      timeout: 20s
+      retries: 3
+      start_period: 30s
+
+  gateway:
+    build: {context: ., dockerfile: Dockerfile}
+    image: freeproxypool:0.1.0
+    restart: always
+    # 不设 container_name、不映射宿主端口：由 Nginx 统一入口分发，支持水平扩容
+    command: ["python", "-m", "freeproxypool", "server"]
+    depends_on:
+      redis: {condition: service_healthy}
+    environment: *app-env
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:5020/health/live', timeout=5).status == 200 else 1)"]
+      interval: 60s
+      timeout: 20s
+      retries: 3
+      start_period: 20s
+
+  validator:
+    build: {context: ., dockerfile: Dockerfile}
+    image: freeproxypool:0.1.0
+    restart: always
+    # 不设 container_name，便于 --scale validator=N
+    command: ["python", "-m", "freeproxypool", "validator"]
+    depends_on:
+      redis: {condition: service_healthy}
+    environment: *app-env
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import sys; from freeproxypool import config_center as cc; sys.exit(0 if cc.get_redis().ping() else 1)"]
+      interval: 60s
+      timeout: 20s
+      retries: 3
+      start_period: 30s
+
+  scheduler:
+    build: {context: ., dockerfile: Dockerfile}
+    image: freeproxypool:0.1.0
+    container_name: fpp_scheduler
+    restart: always
+    # 单副本：多副本会重复执行存量复检、数据清理与统计告警
+    command: ["python", "-m", "freeproxypool", "scheduler"]
+    depends_on:
+      redis: {condition: service_healthy}
+    environment: *app-env
+
+  nginx:
+    image: nginx:alpine
+    container_name: fpp_nginx
+    restart: always
+    ports:
+      - "${HTTP_PORT:-5020}:80"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - gateway
+
+volumes:
+  redis_data:
+  mysql_data:
