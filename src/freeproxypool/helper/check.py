@@ -26,6 +26,17 @@ v0.1.0 SOCKS4/5 支持（P0-1）：
 - 每个 SOCKS 代理一个独立会话，用完即关（连接器不可复用）；
 - 缺少 ``aiohttp-socks`` 依赖时记 ``fail_unsupported``（硬失败），
   不静默把 SOCKS 代理当成"没通过"混进软失败里。
+
+v0.1.1 校验目标看护（借鉴 maximilianfeix/proxy-scraper 的 check-states 语义，见 docs/06）：
+- 核心语义：**"探测目标宕机" ≠ "代理失效"** —— 校验目标不可达时，
+  fail_http 不再惩罚代理（不退避 / 不清 streak / 不触发淘汰），
+  改判为 ``deferred`` 等目标恢复后重验；
+- HTTPS 探测目标不可达时，能力探测失败置 ``None`` 保留已有 ``https`` 值，
+  不再把全池 HTTPS 能力抹成 False；
+- 目标看护的"怀疑"条件 = 连续 fail_http 达阈值 **且** 目标直连探测不可达，
+  直连可达则立即恢复惩罚语义（避免把"一批烂代理"误判为目标故障）；
+- 直连探测结果带 TTL 缓存（``TARGET_GUARD_TTL``），稳态下零额外请求；
+- 新增统计键 ``deferred``，不变式升级为 ``passed + failed + deferred == checked``。
 """
 import asyncio
 import atexit
@@ -52,6 +63,77 @@ SPEED_HISTORY_MAX: int = 100
 
 _LOOP: Optional[asyncio.AbstractEventLoop] = None
 _SESSION: Optional[ClientSession] = None
+
+
+# ================= 校验目标看护（借鉴 maximilianfeix/proxy-scraper，见 docs/06） =================
+
+#: 连续 fail_http 计数（跨批次持久）—— 目标看护的"怀疑"依据
+_FAIL_STREAK = {"count": 0}
+#: 目标直连探测结果缓存：{url: (up, checked_at)}
+_DIRECT_CACHE: Dict[str, Tuple[bool, float]] = {}
+#: 看护生效状态（只在状态翻转时打日志，避免目标宕机期间每批刷屏）
+_GUARD_ACTIVE = {"on": False}
+
+
+def reset_target_guard() -> None:
+    """清空目标看护状态（自测用例与配置热更后使用）。"""
+    _FAIL_STREAK["count"] = 0
+    _DIRECT_CACHE.clear()
+    _GUARD_ACTIVE["on"] = False
+
+
+async def target_direct_ok(session: ClientSession, url: str,
+                           timeout_seconds: int = 5) -> bool:
+    """不带代理直连校验目标，判断目标本身当前是否可达。
+
+    结果按 ``TARGET_GUARD_TTL`` 缓存 —— 校验目标每批都在被成百次经代理探测，
+    这里只是低频旁证，绝不能变成每批必发的额外请求。
+
+    注意：直连不可达**不等于**目标对所有人不可达（部署机自己可能被墙），
+    所以直连结论只与连续失败计数共同构成"怀疑"，单独不触发任何惩罚豁免。
+    """
+    ttl = int(cc.get("TARGET_GUARD_TTL", 120))
+    timeout_seconds = int(cc.get("TARGET_GUARD_TIMEOUT", timeout_seconds))
+    cached = _DIRECT_CACHE.get(url)
+    now = time.time()
+    if cached and now - cached[1] < ttl:
+        return cached[0]
+    ok = False
+    try:
+        async with session.get(url, timeout=ClientTimeout(total=timeout_seconds),
+                               allow_redirects=True) as response:
+            ok = response.status == 200
+    except Exception:
+        ok = False
+    _DIRECT_CACHE[url] = (ok, now)
+    return ok
+
+
+async def _refresh_guard(session: ClientSession, opts: dict) -> None:
+    """每批校验前刷新目标看护状态，把结论写回 ``opts``。
+
+    * ``guard_on``：HTTP 目标疑似不可达 —— 本批 fail_http 改判 ``deferred``；
+    * ``https_target_down``：HTTPS 目标疑似不可达 —— 能力探测失败不覆盖已有值。
+    """
+    opts["guard_on"] = False
+    opts["https_target_down"] = False
+    threshold = max(1, int(cc.get("TARGET_GUARD_THRESHOLD", 20)))
+    if _FAIL_STREAK["count"] >= threshold:
+        if await target_direct_ok(session, opts["http_url"], opts["guard_timeout"]):
+            # 目标直连可达 → 之前的失败是真实代理失败，恢复惩罚语义
+            _FAIL_STREAK["count"] = 0
+        else:
+            opts["guard_on"] = True
+    if not await target_direct_ok(session, opts["https_url"], opts["guard_timeout"]):
+        opts["https_target_down"] = True
+    # 只在状态翻转时打日志
+    if opts["guard_on"] and not _GUARD_ACTIVE["on"]:
+        log.warning("校验目标 %s 连续失败 %d 条且直连不可达，目标看护生效："
+                    "失败暂不惩罚、不清池、不淘汰",
+                    opts["http_url"], _FAIL_STREAK["count"])
+    elif not opts["guard_on"] and _GUARD_ACTIVE["on"]:
+        log.info("校验目标恢复可达，目标看护退出")
+    _GUARD_ACTIVE["on"] = opts["guard_on"]
 
 
 def origin_probe_url(raw: str) -> str:
@@ -254,20 +336,36 @@ async def probe_session(proxy_str: str, protocol: str,
 
 
 def _record(proxy: Proxy, outcome: str, speed: float,
-            https_ok: bool, opts: dict) -> None:
+            https_ok, opts: dict) -> None:
     """统一记录校验结果（在 ``finally`` 块中调用，确保任何代码路径都落账）。
 
     outcome 取值：
     - ``pass``：HTTP 多轮全通过
+    - ``deferred``：目标看护生效 —— 目标疑似不可达，本条不惩罚不记账
     - ``fail_format``：地址格式异常
     - ``fail_tcp``：TCP 端口不通
     - ``fail_http``：HTTP 探针失败
     - ``fail_unsupported``：运行环境不支持该协议（缺 aiohttp-socks）
     """
     store = opts["store"]
+    # 连续 fail_http 计数（目标看护的"怀疑"依据）：通过即清零，失败即累加；
+    # deferred 也源自 fail_http，所以这里在改判**之前**计数 —— 怀疑状态要能持续，
+    # 否则看护一旦生效就把自己的"怀疑证据"清掉了。
+    if outcome == "pass":
+        _FAIL_STREAK["count"] = 0
+    elif outcome == "fail_http":
+        _FAIL_STREAK["count"] += 1
+    # 目标看护生效（unavailable ≠ failed）：目标疑似不可达时，
+    # HTTP 探针失败改判为 deferred —— 不 mark_fail、不退避拉黑、
+    # 不触发淘汰，代理状态原地保留，等目标恢复后自然重验。
+    if outcome == "fail_http" and opts.get("guard_on"):
+        outcome = "deferred"
     # 供 _run 判断本次是硬失败（已移出池）还是软失败（可能仍留在池内）。
     # 这是个临时属性，不属于序列化字段，不会进 Redis。
     proxy._check_outcome = outcome
+
+    if outcome == "deferred":
+        return
 
     if outcome == "pass":
         proxy.mark_pass(https_ok, speed)
@@ -369,6 +467,12 @@ async def _check_one(semaphore: asyncio.Semaphore, session: ClientSession,
                         https_ok = await https_probe(
                             sess, proxy.proxy, opts["https_url"], opts["timeout"],
                             use_proxy_arg=use_proxy)
+                        if not https_ok and opts.get("https_target_down"):
+                            # HTTPS 目标自身不可达：False 只是"这次没测出来"，
+                            # 不是"确认不支持"。置 None 让 mark_pass 保留已有值
+                            # （属性稳定，同 anonymous/region 的 keep_known 哲学），
+                            # 否则目标宕一次机就把全池 HTTPS 能力抹成 False。
+                            https_ok = None
                         outcome = "pass"
                     else:
                         outcome = "fail_http"
@@ -496,6 +600,11 @@ async def _run(proxy_list: List[Proxy], work_type: str,
         # B-01: 新增错误率淘汰阈值
         "max_error_rate": float(cc.get("PROXY_MAX_ERROR_RATE", 0.5)),
         "evict_min_checks": int(cc.get("PROXY_EVICT_MIN_CHECKS", 10)),
+        # 校验目标看护（借鉴 proxy-scraper check-states，见 docs/06）
+        "guard_enabled": bool(cc.get("TARGET_GUARD_ENABLED", True)),
+        "guard_timeout": int(cc.get("TARGET_GUARD_TIMEOUT", 5)),
+        "guard_on": False,
+        "https_target_down": False,
     }
     max_fail = int(cc.get("MAX_FAIL_COUNT", 0))
 
@@ -503,22 +612,31 @@ async def _run(proxy_list: List[Proxy], work_type: str,
     session = await _get_session(concurrency)
     batch_size = max(concurrency * 4, 200)
 
-    stats = {"checked": 0, "passed": 0, "failed": 0, "added": 0, "removed": 0}
+    stats = {"checked": 0, "passed": 0, "failed": 0, "deferred": 0,
+             "added": 0, "removed": 0}
 
     for start in range(0, len(proxy_list), batch_size):
         batch = proxy_list[start:start + batch_size]
+        if opts["guard_enabled"]:
+            # 每批刷新一次看护状态（直连探测带 TTL 缓存，稳态下零额外请求）
+            await _refresh_guard(session, opts)
         tasks = [_check_one(semaphore, session, p, opts) for p in batch]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         passed_items: List[Proxy] = []
         for item in results:
-            # checked 统计**全部**待验条目（含执行异常），failed = 异常 + 校验失败，
-            # 始终维持 passed + failed == checked 的不变式。
+            # checked 统计**全部**待验条目（含执行异常），
+            # 不变式：passed + failed + deferred == checked。
             # 旧实现里 checked 只数非异常条目、failed 又数一遍失败条目，
             # 调用方再拿 checked + failed 当分母，失败条数被重复计入，
             # 通过率被稀释约一半，`FppCheckPassRateLow` 告警也会误判。
             stats["checked"] += 1
             if isinstance(item, BaseException):
                 stats["failed"] += 1
+                continue
+            if getattr(item, "_check_outcome", "") == "deferred":
+                # 目标看护生效：目标疑似故障期间的失败不记账；
+                # 通过率分母要剔除（见 validate_batch），避免稀释告警口径
+                stats["deferred"] += 1
                 continue
             if item.last_status:
                 stats["passed"] += 1
@@ -551,6 +669,9 @@ async def _run(proxy_list: List[Proxy], work_type: str,
                 if work_type != "use":
                     continue
                 outcome = getattr(item, "_check_outcome", "")
+                if outcome == "deferred":
+                    # 目标看护：失败不惩罚也不淘汰，池内评分/错误率/退避保持原样
+                    continue
                 if outcome in HARD_FAILURES:
                     # P0-2: 硬失败已在 _record 中移出有效池并写入退避条目，
                     # 这里绝不能把它写回去 —— 否则死代理立刻回到池里继续被分发。
@@ -601,7 +722,8 @@ def check(proxy_list: List[Proxy], work_type: str = "raw", on_progress=None) -> 
     :param on_progress: 可选进度回调 ``(checked, total)``，每批处理完调用一次。
     """
     if not proxy_list:
-        return {"checked": 0, "passed": 0, "failed": 0, "added": 0, "removed": 0}
+        return {"checked": 0, "passed": 0, "failed": 0, "deferred": 0,
+                "added": 0, "removed": 0}
     loop = get_loop()
     try:
         return loop.run_until_complete(_run(proxy_list, work_type,
@@ -614,7 +736,7 @@ def check(proxy_list: List[Proxy], work_type: str = "raw", on_progress=None) -> 
 __all__ = ["check", "Checker", "get_loop", "close_session", "origin_probe_url",
            "tcp_check", "http_probe", "https_probe",
            "probe_session", "new_socks_session", "HARD_FAILURES",
-           "UnsupportedProtocolError"]
+           "UnsupportedProtocolError", "reset_target_guard", "target_direct_ok"]
 
 
 class Checker:

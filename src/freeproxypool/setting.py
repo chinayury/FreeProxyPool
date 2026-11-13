@@ -92,6 +92,18 @@ DNSBL_ENABLED = True
 #: DNSBL 查询结果缓存时长（秒）
 DNSBL_CACHE_TTL = 3600
 
+# ============ 校验目标看护（借鉴 maximilianfeix/proxy-scraper 的 check-states 语义，见 docs/06） ============
+#: 看护开关：校验目标疑似不可达时，fail_http 不惩罚代理（不退避 / 不清 streak / 不触发淘汰）。
+#: 核心语义："探测目标宕机" ≠ "代理失效" —— 目标挂了不应该毒化整池。
+TARGET_GUARD_ENABLED = True
+#: 连续 fail_http 达到该条数后才怀疑目标故障（避免把"一批烂代理"误判为目标问题）；
+#: 怀疑后会先直连探测目标确认，直连可达则立刻恢复惩罚语义。
+TARGET_GUARD_THRESHOLD = 20
+#: 目标直连探测结果的缓存时长（秒），期间不重复探测
+TARGET_GUARD_TTL = 120
+#: 目标直连探测超时（秒）
+TARGET_GUARD_TIMEOUT = 5
+
 # ============ v0.1.0 评分模型 (B-01/B-02) ============
 #: EWMA 平滑因子（越大越偏向最新样本）
 EWMA_ALPHA = 0.3

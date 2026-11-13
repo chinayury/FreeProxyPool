@@ -117,16 +117,21 @@ class Proxy:
         if name and name not in self.source:
             self.source.append(name)
 
-    def mark_pass(self, https_ok: bool, speed: float,
+    def mark_pass(self, https_ok, speed: float,
                   score_max: int = 0, score_step: int = 0) -> None:
         """标记一次校验通过。
 
         v0.1.0 变更：保留 ``score_max`` / ``score_step`` 参数仅为了兼容外部调用，
         内部不再用于手工累加评分（改由 :meth:`_recalc_score` 派生）。
+
+        v0.1.1 变更：``https_ok`` 可为 ``None`` —— 表示"HTTPS 能力这次没测出来"
+        （HTTPS 探测目标自身不可达），此时保留已有值不覆盖（属性稳定原则，
+        与 anonymous / region / ip_type 的 keep_known 语义对齐）。
         """
         self.check_count += 1
         self.last_status = True
-        self.https = https_ok
+        if https_ok is not None:
+            self.https = bool(https_ok)
         self.speed = round(float(speed or 0.0), 4)
         if self.fail_count > 0:
             self.fail_count -= 1

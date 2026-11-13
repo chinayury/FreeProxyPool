@@ -110,3 +110,28 @@
 - 包可导入：`import freeproxypool`、`from freeproxypool.gateway.main import app` 成功。
 - 版本锚点一致：`VERSION` 文件、`pyproject.toml`、`core/version.py` 兜底值、docker-compose 镜像标签四处均为 `0.1.0`。
 
+## [v0.1.1] - 2026-11-14
+
+校验目标看护（unavailable ≠ failed）+ 同类项目调研借鉴首轮。无接口变更、无兼容性影响：目标健康时校验行为与历史完全一致，新逻辑仅在"校验目标自身不可达"时接管惩罚语义。
+
+### 修复
+
+- **校验目标故障毒化整池**（中危）：HTTP 校验目标宕机/被墙时，全量代理被误判 `fail_http` 进入退避黑名单、streak 清零、错误率抬升直至淘汰；HTTPS 目标宕机时全池 HTTPS 能力被抹成 False。现引入目标看护：连续 fail_http 达阈值且目标直连不可达时，失败改判 `deferred`（不退避/不清 streak/不计错误率/不淘汰），目标恢复自动重验；HTTPS 能力保值。受影响文件：`src/freeproxypool/helper/check.py`、`src/freeproxypool/helper/proxy.py`、`src/freeproxypool/services/validator.py`、`src/freeproxypool/services/scheduler.py`。
+- **docs/01 许可声明过期**：Apache-2.0 修正为 AGPL-3.0-or-later（与 LICENSE/README 对齐）；版本行不再硬编码，引用 `VERSION` 单一来源。
+
+### 新增
+
+- 配置项 `TARGET_GUARD_ENABLED` / `TARGET_GUARD_THRESHOLD` / `TARGET_GUARD_TTL` / `TARGET_GUARD_TIMEOUT`（默认值见 `setting.py`，进入配置中心白名单，管理后台可热更）。
+- 校验统计新增 `deferred` 键；不变式升级为 `passed + failed + deferred == checked`，通过率分母剔除 deferred。
+- 自检新增 `test_target_guard`（目标健康/疑似故障/恢复/HTTPS 保值四场景），自检总数 710 → 718。
+- 新增 `docs/06-调研与借鉴.md`（同类项目调研与借鉴决策记录）。
+
+### 兼容性
+
+- 新增统计键与配置项均为增量；`/get/` `/batch/` 等全部 API 入参出参不变；历史行为仅在目标看护触发时改变（该场景历史上产生误惩罚，属缺陷修复语义）。
+
+### 验证
+
+- `python -m freeproxypool selftest` —— 718 / 718 全部通过。
+- 版本锚点一致：`VERSION` / `pyproject.toml` / `core/version.py` / docker-compose 镜像标签（4 处）/ docs 声明均为 `0.1.1`。
+

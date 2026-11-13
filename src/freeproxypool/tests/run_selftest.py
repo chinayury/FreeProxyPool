@@ -84,9 +84,9 @@ def test_version():
     from ..core.version import VERSION, FALLBACK_VERSION, read_version
     with open(os.path.join(_ROOT, "VERSION"), "r", encoding="utf-8") as fp:
         file_value = fp.read().strip()
-    check("VERSION 文件内容为 0.1.0", file_value == "0.1.0", file_value)
+    check("VERSION 文件内容为 0.1.1", file_value == "0.1.1", file_value)
     check("core.version.VERSION 与文件一致", VERSION == file_value, VERSION)
-    check("兜底版本同为 0.1.0", FALLBACK_VERSION == "0.1.0", FALLBACK_VERSION)
+    check("兜底版本同为 0.1.1", FALLBACK_VERSION == "0.1.1", FALLBACK_VERSION)
     check("read_version 可重复调用", read_version() == VERSION)
 
     from .. import setting
@@ -126,11 +126,11 @@ def test_version_anchors():
     section("版本锁：部署面锚点与文档声明")
     import re
     # 期望值拆开拼接：门禁扫文档时不会匹配到它自己写下的字面量
-    expected = "0.1" + ".0"
+    expected = "0.1" + ".1"
 
     anchors = _collect_version_anchors(_ROOT)
     bad = _anchor_mismatches(anchors, expected)
-    check("部署面锚点全部为 0.1.0", not bad, bad or sorted(anchors))
+    check("部署面锚点全部为 0.1.1", not bad, bad or sorted(anchors))
     check("锚点覆盖 VERSION/兜底/compose",
           set(anchors) == {"VERSION 文件", "core.version 兜底值",
                            "compose 镜像标签"},
@@ -147,16 +147,16 @@ def test_version_anchors():
     docs_dir = os.path.join(_ROOT, "docs")
     doc_ver = os.path.join(docs_dir, "05-开发日志.md")
     if not os.path.isfile(doc_ver):
-        check("docs/05 声明的当前版本为 0.1.0", False,
+        check("docs/05 声明的当前版本为 0.1.1", False,
               "docs/05-开发日志.md 不在构建上下文里")
     else:
         with open(doc_ver, "r", encoding="utf-8") as fp:
             cur = [ln.strip() for ln in fp.read().splitlines() if "当前版本" in ln]
-        check("docs/05 声明的当前版本为 0.1.0",
+        check("docs/05 声明的当前版本为 0.1.1",
               bool(cur) and all(expected in ln for ln in cur), cur[:2])
 
-    # 不得出现虚构的同族版本（v0.1.x 且 x≠0）—— 本项目只发布过 0.1.0。
-    # 唯一例外：明确标注为"后续版本约定"的举例句（docs/05 §版本策略）。
+    # 不得出现虚构的同族版本（v0.1.x 且非当前版本）——
+    # 文档不得硬编码任何具体版本号，一律引用 VERSION 单一来源。
     fiction = []
     pat = re.compile(r"(?<![\w.])v(0\.1\.\d+)(?![\w.])")
     if os.path.isdir(docs_dir):
@@ -910,7 +910,7 @@ def test_gateway():
         # --- 基础端点 ---
         r = client.get("/version")
         check("GET /version 可用", r.status_code == 200, r.status_code)
-        check("版本号为 0.1.0", r.json()["version"] == "0.1.0", r.json())
+        check("版本号为 0.1.1", r.json()["version"] == "0.1.1", r.json())
 
         r = client.get("/health/live")
         check("GET /health/live 不碰存储", r.status_code == 200)
@@ -1441,8 +1441,9 @@ def test_check_stats_invariant():
         check("checked 覆盖全部条目（含格式错误）", stats["checked"] == 3, stats)
         check("passed / failed 各自准确",
               stats["passed"] == 2 and stats["failed"] == 1, stats)
-        check("不变式 passed + failed == checked",
-              stats["passed"] + stats["failed"] == stats["checked"], stats)
+        check("不变式 passed + failed + deferred == checked",
+              stats["passed"] + stats["failed"] + stats.get("deferred", 0)
+              == stats["checked"], stats)
     finally:
         check_mod.tcp_check = original_tcp
         check_mod.http_probe = original_http
@@ -1535,6 +1536,131 @@ def test_dead_proxy_backoff_pipeline():
         check_mod.tcp_check = original_tcp
         check_mod.http_probe = original_http
         check_mod.https_probe = original_https
+        cc.get_redis = original_get
+        reset_store()
+        cc._bump_cache()
+
+
+def test_target_guard():
+    section("校验目标看护（unavailable ≠ failed）")
+    from .. import config_center as cc
+    from ..db.dbClient import get_store, reset_store
+    from ..helper import check as check_mod
+    from ..helper.proxy import Proxy
+    from .fake_redis import FakeRedis
+
+    fake = FakeRedis()
+    original_get = cc.get_redis
+    cc.get_redis = lambda: fake
+    for key in ("PROXY_REGION", "ASN_ENABLED", "DNSBL_ENABLED"):
+        fake.hset(cc.KEY_CONFIG, key, "0")
+    cc._bump_cache()
+    reset_store()
+    check_mod.reset_target_guard()
+
+    original_tcp = check_mod.tcp_check
+    original_http = check_mod.http_probe
+    original_https = check_mod.https_probe
+    original_direct = check_mod.target_direct_ok
+    state = {"tcp": True, "http": True, "https": True, "direct_ok": True}
+
+    async def _tcp(ip, port, timeout):
+        return state["tcp"]
+
+    async def _http(session, proxy_str, url, timeout, **kwargs):
+        if not state["http"]:
+            return False, 0.0, "", {}
+        return True, 0.2, "9.9.9.9", {"via": "proxy"}
+
+    async def _https(session, proxy_str, url, timeout, **kwargs):
+        return state["https"]
+
+    async def _direct_ok(session, url, timeout_seconds=5):
+        return state["direct_ok"]
+
+    check_mod.tcp_check = _tcp
+    check_mod.http_probe = _http
+    check_mod.https_probe = _https
+    check_mod.target_direct_ok = _direct_ok
+    try:
+        payload = {"proxy": "6.6.6.8:80", "https": True, "score": 80,
+                   "region": "", "source": "t", "anonymous": "elite",
+                   "check_count": 1, "error_count": 0, "ewma_speed": 0.3}
+
+        # --- 场景 1：目标健康 → 失败照常惩罚（历史行为逐字节不变） ---
+        state["http"] = False
+        state["direct_ok"] = True
+        store = get_store()
+        store.put(dict(payload))
+        stats = check_mod.check([Proxy.from_dict(dict(payload))], work_type="use")
+        check("目标健康时失败照常惩罚（历史行为不变）",
+              stats["deferred"] == 0 and store.is_black("6.6.6.8:80"), stats)
+        check("目标健康时不变式成立",
+              stats["passed"] + stats["failed"] + stats["deferred"] == stats["checked"],
+              stats)
+
+        # --- 场景 2：目标疑似故障（连续失败达标 + 直连不可达）→ deferred 不惩罚 ---
+        check_mod.reset_target_guard()
+        reset_store()
+        store = get_store()
+        state["direct_ok"] = False
+        check_mod._FAIL_STREAK["count"] = 20   # 达到默认怀疑阈值
+        items = [Proxy.from_dict(dict(payload, proxy="6.6.7.%d:80" % i))
+                 for i in range(1, 6)]
+        stats = check_mod.check(items, work_type="use")
+        check("目标疑似故障时失败改判 deferred",
+              stats["deferred"] == 5 and stats["failed"] == 0, stats)
+        check("deferred 不写退避黑名单",
+              all(not store.is_black("6.6.7.%d:80" % i) for i in range(1, 6)))
+        check("deferred 不改写池内状态（评分/错误率保持原样）",
+              not [i for i in store.get_all()
+                   if i["proxy"].startswith("6.6.7.")],
+              [i["proxy"] for i in store.get_all() if i["proxy"].startswith("6.6.7.")])
+
+        # --- 场景 3：目标恢复 → 惩罚语义自动恢复 ---
+        check_mod.reset_target_guard()
+        reset_store()
+        store = get_store()
+        state["direct_ok"] = True
+        check_mod._FAIL_STREAK["count"] = 20
+        stats = check_mod.check(
+            [Proxy.from_dict(dict(payload, proxy="6.6.8.1:80"))], work_type="use")
+        check("目标恢复后失败重新受罚",
+              stats["deferred"] == 0 and store.is_black("6.6.8.1:80"), stats)
+
+        # --- 场景 4：HTTPS 目标不可达 → https 能力保留旧值不被抹 ---
+        check_mod.reset_target_guard()
+        reset_store()
+        store = get_store()
+        state["http"] = True
+        state["https"] = False
+        state["direct_ok"] = False
+        keep = {"proxy": "6.6.6.9:80", "https": True, "score": 80,
+                "region": "", "source": "t", "anonymous": "elite",
+                "check_count": 1, "error_count": 0, "ewma_speed": 0.3}
+        store.put(dict(keep))
+        check_mod.check([Proxy.from_dict(dict(keep))], work_type="use")
+        rows = [i for i in store.get_all() if i["proxy"] == "6.6.6.9:80"]
+        check("HTTPS 目标不可达时能力值保留旧值",
+              bool(rows) and rows[0]["https"] is True, rows)
+
+        # 对照：目标健康时能力值如实更新为 False
+        check_mod.reset_target_guard()
+        reset_store()
+        store = get_store()
+        state["direct_ok"] = True
+        store.put(dict(keep, proxy="6.6.6.10:80"))
+        check_mod.check([Proxy.from_dict(dict(keep, proxy="6.6.6.10:80"))],
+                        work_type="use")
+        rows = [i for i in store.get_all() if i["proxy"] == "6.6.6.10:80"]
+        check("HTTPS 目标健康时能力值如实更新",
+              bool(rows) and rows[0]["https"] is False, rows)
+    finally:
+        check_mod.tcp_check = original_tcp
+        check_mod.http_probe = original_http
+        check_mod.https_probe = original_https
+        check_mod.target_direct_ok = original_direct
+        check_mod.reset_target_guard()
         cc.get_redis = original_get
         reset_store()
         cc._bump_cache()
@@ -3380,6 +3506,7 @@ def main() -> int:
                test_logging,
                test_proxy_model, test_region_helpers,
                test_check_stats_invariant, test_dead_proxy_backoff_pipeline,
+               test_target_guard,
                test_diagnose, test_diagnose_cli,
                test_scheduler_reschedule,
                test_latency_tier, test_tier_filter_and_stats, test_tier_api,

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "freeproxypool"
-version = "0.1.0"
+version = "0.1.1"
 description = "免费代理 IP 池系统：采集 / 验证 / 分发"
 readme = "README.md"
 requires-python = ">=3.12"

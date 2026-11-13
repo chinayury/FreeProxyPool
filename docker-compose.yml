@@ -81,7 +81,7 @@ services:
 
   collector:
     build: {context: ., dockerfile: Dockerfile}
-    image: freeproxypool:0.1.0
+    image: freeproxypool:0.1.1
     container_name: fpp_collector
     restart: always
     command: ["python", "-m", "freeproxypool", "collector"]
@@ -102,7 +102,7 @@ services:
 
   gateway:
     build: {context: ., dockerfile: Dockerfile}
-    image: freeproxypool:0.1.0
+    image: freeproxypool:0.1.1
     restart: always
     # 不设 container_name、不映射宿主端口：由 Nginx 统一入口分发，支持水平扩容
     command: ["python", "-m", "freeproxypool", "server"]
@@ -119,7 +119,7 @@ services:
 
   validator:
     build: {context: ., dockerfile: Dockerfile}
-    image: freeproxypool:0.1.0
+    image: freeproxypool:0.1.1
     restart: always
     # 不设 container_name，便于 --scale validator=N
     command: ["python", "-m", "freeproxypool", "validator"]
@@ -136,7 +136,7 @@ services:
 
   scheduler:
     build: {context: ., dockerfile: Dockerfile}
-    image: freeproxypool:0.1.0
+    image: freeproxypool:0.1.1
     container_name: fpp_scheduler
     restart: always
     # 单副本：多副本会重复执行存量复检、数据清理与统计告警

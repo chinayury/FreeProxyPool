@@ -64,20 +64,24 @@ def validate_batch(queue: ProxyQueue = None) -> dict:
                             total=_cycle["total"], message="待验队列已抽干")
             _cycle["total"] = 0
             _cycle["checked"] = 0
-        return {"checked": 0, "passed": 0, "failed": 0, "added": 0, "removed": 0}
+        return {"checked": 0, "passed": 0, "failed": 0, "deferred": 0,
+                "added": 0, "removed": 0}
 
     # v0.1.0：载荷携带采集来源，兼容旧的裸 ip:port 条目
     from ..db.queue import decode
     stats = check([decode(item) for item in items], work_type="raw")
-    # checked 已含全部条目（helper.check._run 维持 passed + failed == checked），
-    # 直接用它做分母；旧代码再 + failed 会把失败条数重复计入、稀释通过率
-    checked = max(1, stats.get("checked", 0))
-    pass_rate = round(stats.get("passed", 0) / checked, 4) if checked else 0.0
+    # checked 已含全部条目（helper.check._run 维持 passed + failed + deferred
+    # == checked），直接用它做分母；旧代码再 + failed 会把失败条数重复计入、
+    # 稀释通过率。目标看护生效时 deferred 是"没验"而不是"失败"，同样剔除。
+    deferred = stats.get("deferred", 0)
+    effective = max(1, stats.get("checked", 0) - deferred)
+    pass_rate = round(stats.get("passed", 0) / effective, 4)
 
     cc.mark_stat("check:last_total", stats.get("passed", 0))
     cc.mark_stat("check:last_run")
     cc.mark_stat("check:pass_rate", pass_rate)
-    cc.mark_stat("check:total", int(cc.get_stat("check:total", 0)) + checked)
+    cc.mark_stat("check:total",
+                 int(cc.get_stat("check:total", 0)) + stats.get("checked", 0))
 
     _cycle["checked"] += len(items)
     if not _cycle["total"]:
@@ -89,6 +93,9 @@ def validate_batch(queue: ProxyQueue = None) -> dict:
 
     log.info("本批验证完成：消费 %d 条，通过 %d 条，入池 %d 条，通过率 %.1f%%",
              len(items), stats.get("passed", 0), stats.get("added", 0), pass_rate * 100)
+    if deferred:
+        log.info("目标看护跳过 %d 条（校验目标疑似不可达，失败不惩罚，待目标恢复后重验）",
+                 deferred)
     return stats
 
 

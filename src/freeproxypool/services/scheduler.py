@@ -116,12 +116,16 @@ def task_recheck() -> None:
                         checked=0, total=total,
                         message="存量复检失败：%s" % type(exc).__name__)
         raise
+    deferred = stats.get("deferred", 0)
+    guard_note = ("，目标看护跳过 %d 条" % deferred) if deferred else ""
     progress.finish("recheck", checked=stats.get("checked", total),
                     passed=stats.get("passed", 0), failed=stats.get("failed", 0),
-                    message="存量复检完成：淘汰 %d 条" % stats.get("removed", 0))
+                    message="存量复检完成：淘汰 %d 条%s"
+                            % (stats.get("removed", 0), guard_note))
     cc.mark_stat("recheck:last_run")
-    log.info("存量复检完成：校验 %d 条，淘汰 %d 条",
-             stats.get("checked", 0), stats.get("removed", 0))
+    log.info("存量复检完成：校验 %d 条，淘汰 %d 条%s",
+             stats.get("checked", 0), stats.get("removed", 0),
+             ("，目标看护跳过 %d 条" % deferred) if deferred else "")
 
 
 def task_cleanup() -> None:
