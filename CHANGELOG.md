@@ -135,3 +135,17 @@
 - `python -m freeproxypool selftest` —— 718 / 718 全部通过。
 - 版本锚点一致：`VERSION` / `pyproject.toml` / `core/version.py` / docker-compose 镜像标签（4 处）/ docs 声明均为 `0.1.1`。
 
+## [v0.1.2] - 2026-11-14
+
+管理后台总览页渲染缺陷修复（`var t` 遮蔽 i18n 函数）。无接口变更、无配置变更；唯一行为变化是总览页从此正常渲染。
+
+### 修复
+
+- **管理后台总览面板恒空白**（中危）：`loadOverview()` 渲染回调内 `var t = getElementById('tierStats')` 发生 `var` 提升，遮蔽全局 i18n 函数 `t()`，回调首次调用 `t('stat.pool')` 即抛 `TypeError` 被静默吞掉，统计卡片与五个分布面板全部空白。修改变量名为 `tEl` 并留防回归注释。受影响文件：`src/freeproxypool/admin/templates/admin.html`（此前 0.1.1 的总览页在任何浏览器中均不可用）。
+- 验证方式：部署后无头 Chrome + CDP 真实登录截图，总览页全部面板正常渲染。
+
+### 验证
+
+- `python -m freeproxypool selftest` —— 全部通过（用例总数随版本字面量同步更新）。
+- 版本锚点一致：`VERSION` / `pyproject.toml` / `core/version.py` / docker-compose 镜像标签（4 处）/ docs 声明均为 `0.1.2`。
+

@@ -84,9 +84,9 @@ def test_version():
     from ..core.version import VERSION, FALLBACK_VERSION, read_version
     with open(os.path.join(_ROOT, "VERSION"), "r", encoding="utf-8") as fp:
         file_value = fp.read().strip()
-    check("VERSION 文件内容为 0.1.1", file_value == "0.1.1", file_value)
+    check("VERSION 文件内容为 0.1.2", file_value == "0.1.2", file_value)
     check("core.version.VERSION 与文件一致", VERSION == file_value, VERSION)
-    check("兜底版本同为 0.1.1", FALLBACK_VERSION == "0.1.1", FALLBACK_VERSION)
+    check("兜底版本同为 0.1.2", FALLBACK_VERSION == "0.1.2", FALLBACK_VERSION)
     check("read_version 可重复调用", read_version() == VERSION)
 
     from .. import setting
@@ -126,11 +126,11 @@ def test_version_anchors():
     section("版本锁：部署面锚点与文档声明")
     import re
     # 期望值拆开拼接：门禁扫文档时不会匹配到它自己写下的字面量
-    expected = "0.1" + ".1"
+    expected = "0.1" + ".2"
 
     anchors = _collect_version_anchors(_ROOT)
     bad = _anchor_mismatches(anchors, expected)
-    check("部署面锚点全部为 0.1.1", not bad, bad or sorted(anchors))
+    check("部署面锚点全部为 0.1.2", not bad, bad or sorted(anchors))
     check("锚点覆盖 VERSION/兜底/compose",
           set(anchors) == {"VERSION 文件", "core.version 兜底值",
                            "compose 镜像标签"},
@@ -147,12 +147,12 @@ def test_version_anchors():
     docs_dir = os.path.join(_ROOT, "docs")
     doc_ver = os.path.join(docs_dir, "05-开发日志.md")
     if not os.path.isfile(doc_ver):
-        check("docs/05 声明的当前版本为 0.1.1", False,
+        check("docs/05 声明的当前版本为 0.1.2", False,
               "docs/05-开发日志.md 不在构建上下文里")
     else:
         with open(doc_ver, "r", encoding="utf-8") as fp:
             cur = [ln.strip() for ln in fp.read().splitlines() if "当前版本" in ln]
-        check("docs/05 声明的当前版本为 0.1.1",
+        check("docs/05 声明的当前版本为 0.1.2",
               bool(cur) and all(expected in ln for ln in cur), cur[:2])
 
     # 不得出现虚构的同族版本（v0.1.x 且非当前版本）——
@@ -910,7 +910,7 @@ def test_gateway():
         # --- 基础端点 ---
         r = client.get("/version")
         check("GET /version 可用", r.status_code == 200, r.status_code)
-        check("版本号为 0.1.1", r.json()["version"] == "0.1.1", r.json())
+        check("版本号为 0.1.2", r.json()["version"] == "0.1.2", r.json())
 
         r = client.get("/health/live")
         check("GET /health/live 不碰存储", r.status_code == 200)

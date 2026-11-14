@@ -715,11 +715,13 @@ function loadOverview(){
       : '<div class="empty">'+esc(t('common.noData'))+'</div>';
 
     /* 延迟分层分布（借鉴 docs/09 P0-3） */
-    var t = document.getElementById('tierStats');
+    /* 注意变量名不能叫 t —— 会遮蔽全局 i18n 函数 t()（var 提升），
+       导致整个回调里的 t('...') 全部抛 TypeError、总览面板恒空白（v0.1.1 回归） */
+    var tEl = document.getElementById('tierStats');
     var tiers = d.tiers||{};
     var tierKeys = ['fast','medium','slow','unknown'];
     var tierTotal = tierKeys.reduce(function(s,k){ return s + (tiers[k]||0); }, 0);
-    t.innerHTML = tierTotal
+    tEl.innerHTML = tierTotal
       ? '<table><thead><tr>'+th(t('th.tier'))+th(t('th.total'))+'</tr></thead><tbody>'+
         tierKeys.map(function(k){
           var n = tiers[k]||0;
