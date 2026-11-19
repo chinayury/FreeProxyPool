@@ -46,6 +46,8 @@ API_LIST = [
      "desc": "批量获取代理（最多 BATCH_MAX 条）"},
     {"url": "/pop/", "params": "type=https, anon=elite, protocol=socks5, format=json|text", "desc": "获取并从池中删除一个代理"},
     {"url": "/all/", "params": "type=https, area=CN, anon=elite, tier=fast, protocol=socks5, format=json|text", "desc": "获取代理列表"},
+    {"url": "/subscribe/clash", "params": "key=API_KEY, type=https, area=CN, tier=fast, protocol=socks5", "desc": "Clash/Mihomo 订阅输出（YAML，含 http/socks5 节点）"},
+    {"url": "/subscribe/v2ray", "params": "key=API_KEY, type=https, area=CN, tier=fast, protocol=socks5", "desc": "V2Ray/v2rayN 订阅输出（base64 分享 URI）"},
     {"url": "/count/", "params": "", "desc": "代理池统计（含 tier / protocol 分布）"},
     {"url": "/delete/", "params": "proxy=ip:port", "desc": "删除指定代理"},
     {"url": "/report/", "params": "proxies=[...]", "desc": "回报失效代理（快速淘汰）"},
@@ -386,19 +388,12 @@ def pop_proxy(request: Request):
     return annotate({"code": 0, "message": "暂无可用代理"}, pool_low)
 
 
-@public.get("/all/", dependencies=[Depends(require_api_key), Depends(enforce_rate_limit)])
-def get_all(request: Request):
-    """获取代理列表（最多 ``ALL_MAX`` 条）。
+def _filtered_pool(request: Request) -> list:
+    """/all/ 与 /subscribe/ 共用的取数与过滤链路（多入口同一核心）。
 
-    查询参数：
-
-    * ``type``   —— ``https`` 表示只要支持 HTTPS 隧道的代理
-    * ``area``   —— 两位国家码
-    * ``anon``   —— ``elite`` / ``anonymous`` / ``transparent`` 匿名度筛选
-    * ``exclude_dnsbl`` —— ``1``/``true`` 排除 DNSBL 列入代理
-    * ``tier``   —— ``fast`` / ``medium`` / ``slow`` / ``unknown`` 延迟分层筛选
-    * ``protocol`` —— ``http`` / ``socks4`` / ``socks5`` 传输协议筛选（P0-1）
-    * ``format`` —— ``json``（默认）/ ``text`` 纯文本，一行一个 ``ip:port``（P2-3）
+    解析查询参数 → 取数（area 走地域索引，可用性降级全表）→ 逐层筛选
+    → 按 ``ALL_MAX`` 截断。返回**原始** item 列表（未 decorate），
+    展示层自行决定加不加 tier/protocol 标签。
     """
     store = get_store()
     https = parse_type(request.query_params.get("type"))
@@ -407,7 +402,6 @@ def get_all(request: Request):
     exclude_dnsbl = parse_bool_param(request.query_params.get("exclude_dnsbl"), False)
     tier = parse_tier(request.query_params.get("tier"))
     protocol = parse_protocol(request.query_params.get("protocol"))
-    fmt = parse_format(request.query_params.get("format"))
     limit = int(cc.get("ALL_MAX", 200))
     if area:
         # 走地域索引（借鉴 docs/09 P1-1），索引不可用时自动降级全表扫描。
@@ -431,6 +425,25 @@ def get_all(request: Request):
     items = items[:limit]
     if len(items) >= limit:
         cc.mark_stat("api:all_truncated", 1)
+    return items
+
+
+@public.get("/all/", dependencies=[Depends(require_api_key), Depends(enforce_rate_limit)])
+def get_all(request: Request):
+    """获取代理列表（最多 ``ALL_MAX`` 条）。
+
+    查询参数：
+
+    * ``type``   —— ``https`` 表示只要支持 HTTPS 隧道的代理
+    * ``area``   —— 两位国家码
+    * ``anon``   —— ``elite`` / ``anonymous`` / ``transparent`` 匿名度筛选
+    * ``exclude_dnsbl`` —— ``1``/``true`` 排除 DNSBL 列入代理
+    * ``tier``   —— ``fast`` / ``medium`` / ``slow`` / ``unknown`` 延迟分层筛选
+    * ``protocol`` —— ``http`` / ``socks4`` / ``socks5`` 传输协议筛选（P0-1）
+    * ``format`` —— ``json``（默认）/ ``text`` 纯文本，一行一个 ``ip:port``（P2-3）
+    """
+    fmt = parse_format(request.query_params.get("format"))
+    items = _filtered_pool(request)
     if fmt == "text":
         return text_response([i.get("proxy") for i in items])
     # 只给**返回的**这批打 tier / protocol 标签：池子上万时，
@@ -439,6 +452,38 @@ def get_all(request: Request):
     fast_ms, medium_ms = tier_thresholds()
     items = decorate(items, fast_ms, medium_ms)
     return items
+
+
+@public.get("/subscribe/clash", dependencies=[Depends(require_api_key), Depends(enforce_rate_limit)])
+def subscribe_clash(request: Request):
+    """Clash / Mihomo 订阅输出（YAML）。
+
+    把池内 HTTP / SOCKS5 代理输出为 Clash 订阅 —— 客户端把
+    ``/subscribe/clash?key=<API_KEY>`` 配成订阅 URL 即可同步整个
+    代理池为一个可选节点组。筛选参数与 ``/all/`` 相同；
+    **SOCKS4 代理不被输出**（Clash 无此节点类型，硬塞只会生成死节点）。
+    """
+    from ..helper.subscribe import build_clash_yaml
+    items = _filtered_pool(request)
+    if items:
+        metrics.inc_counter(metrics.gateway_served, len(items))
+    return Response(content=build_clash_yaml(items),
+                    media_type="text/plain; charset=utf-8")
+
+
+@public.get("/subscribe/v2ray", dependencies=[Depends(require_api_key), Depends(enforce_rate_limit)])
+def subscribe_v2ray(request: Request):
+    """V2Ray / v2rayN 订阅输出（base64 编码的逐行分享 URI）。
+
+    HTTP 代理 → ``http://host:port#name``，SOCKS5 → ``socks://host:port#name``；
+    筛选参数与 ``/all/`` 相同，SOCKS4 代理不被输出（v2rayN 按 SOCKS5 解析）。
+    """
+    from ..helper.subscribe import build_v2ray_b64
+    items = _filtered_pool(request)
+    if items:
+        metrics.inc_counter(metrics.gateway_served, len(items))
+    return Response(content=build_v2ray_b64(items),
+                    media_type="text/plain; charset=utf-8")
 
 
 @public.get("/count/", dependencies=[Depends(require_api_key), Depends(enforce_rate_limit)])

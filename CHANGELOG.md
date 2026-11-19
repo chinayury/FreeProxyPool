@@ -149,3 +149,27 @@
 - `python -m freeproxypool selftest` —— 全部通过（用例总数随版本字面量同步更新）。
 - 版本锚点一致：`VERSION` / `pyproject.toml` / `core/version.py` / docker-compose 镜像标签（4 处）/ docs 声明均为 `0.1.2`。
 
+## [v0.2.0] - 2026-11-19
+
+新增订阅输出端点：把整个代理池以 Clash / V2Ray 订阅链接形态分发（借鉴 vpn 类项目的标准分发形态，见 docs/06）。无破坏性变更：既有 REST API、配置项、SDK 行为全部不变。
+
+### 新增
+
+- **`GET /subscribe/clash`**：输出 Clash/Mihomo 订阅 YAML —— `proxies`（http/socks5 节点）+ `FreeProxyPool` select 节点组 + `MATCH` 规则，客户端把 `/subscribe/clash?key=<API_KEY>` 配成订阅 URL 即可自动同步整个代理池；空池时组回落 DIRECT，配置始终合法。
+- **`GET /subscribe/v2ray`**：输出 V2Ray/v2rayN 订阅（`base64(逐行分享 URI)`）—— HTTP 代理 → `http://host:port#name`，SOCKS5 → `socks://host:port#name`。
+- 两个端点与 `/all/` 共用同一取数/筛选链路（`type`/`area`/`anon`/`tier`/`protocol`/`exclude_dnsbl` 全部可用，条数受 `ALL_MAX` 约束），鉴权与限流同级：`API_KEY` 支持 query `key=`（订阅工具通常无法自定义请求头）与 `API-KEY` 请求头两种方式。
+- **SOCKS4 代理不进入订阅输出**：Clash/Mihomo 无 socks4 节点类型，v2rayN 的 `socks://` 按 SOCKS5 解析，硬塞只会生成死节点——如实跳过（测试断言覆盖）。
+- 受影响文件：`src/freeproxypool/helper/subscribe.py`（新增，纯格式化函数零依赖）、`src/freeproxypool/gateway/api.py`（新增端点 + 抽取 `/all/` 与订阅共用的取数过滤 `_filtered_pool`）、`src/freeproxypool/tests/run_selftest.py`（新增 `test_subscribe`，自检 718 → 731）。
+- 版本门禁的虚构版本扫描改为动态版本族（从当前版本推导 major.minor），升 minor 后旧族历史引用合法保留。
+
+### 兼容性
+
+- 全部为增量：既有端点、参数、响应结构不变；`/all/` 重构后行为逐字节一致（复用同一过滤函数）。
+- 新增用户可见功能，按语义化版本递增 minor（0.1.2 → 0.2.0）。
+
+### 验证
+
+- `python -m freeproxypool selftest` —— 731 / 731 全部通过。
+- 测试机部署后 `curl /subscribe/clash` 真实拉取验证输出格式。
+- 版本锚点一致：`VERSION` / `pyproject.toml` / `core/version.py` / docker-compose 镜像标签（4 处）/ docs 声明均为 `0.2.0`。
+

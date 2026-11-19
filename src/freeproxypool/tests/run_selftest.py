@@ -84,9 +84,9 @@ def test_version():
     from ..core.version import VERSION, FALLBACK_VERSION, read_version
     with open(os.path.join(_ROOT, "VERSION"), "r", encoding="utf-8") as fp:
         file_value = fp.read().strip()
-    check("VERSION 文件内容为 0.1.2", file_value == "0.1.2", file_value)
+    check("VERSION 文件内容为 0.2.0", file_value == "0.2.0", file_value)
     check("core.version.VERSION 与文件一致", VERSION == file_value, VERSION)
-    check("兜底版本同为 0.1.2", FALLBACK_VERSION == "0.1.2", FALLBACK_VERSION)
+    check("兜底版本同为 0.2.0", FALLBACK_VERSION == "0.2.0", FALLBACK_VERSION)
     check("read_version 可重复调用", read_version() == VERSION)
 
     from .. import setting
@@ -126,11 +126,11 @@ def test_version_anchors():
     section("版本锁：部署面锚点与文档声明")
     import re
     # 期望值拆开拼接：门禁扫文档时不会匹配到它自己写下的字面量
-    expected = "0.1" + ".2"
+    expected = "0.2" + ".0"
 
     anchors = _collect_version_anchors(_ROOT)
     bad = _anchor_mismatches(anchors, expected)
-    check("部署面锚点全部为 0.1.2", not bad, bad or sorted(anchors))
+    check("部署面锚点全部为 0.2.0", not bad, bad or sorted(anchors))
     check("锚点覆盖 VERSION/兜底/compose",
           set(anchors) == {"VERSION 文件", "core.version 兜底值",
                            "compose 镜像标签"},
@@ -147,18 +147,21 @@ def test_version_anchors():
     docs_dir = os.path.join(_ROOT, "docs")
     doc_ver = os.path.join(docs_dir, "05-开发日志.md")
     if not os.path.isfile(doc_ver):
-        check("docs/05 声明的当前版本为 0.1.2", False,
+        check("docs/05 声明的当前版本为 0.2.0", False,
               "docs/05-开发日志.md 不在构建上下文里")
     else:
         with open(doc_ver, "r", encoding="utf-8") as fp:
             cur = [ln.strip() for ln in fp.read().splitlines() if "当前版本" in ln]
-        check("docs/05 声明的当前版本为 0.1.2",
+        check("docs/05 声明的当前版本为 0.2.0",
               bool(cur) and all(expected in ln for ln in cur), cur[:2])
 
-    # 不得出现虚构的同族版本（v0.1.x 且非当前版本）——
+    # 不得出现虚构的同族版本（v<major>.<minor>.x 且非当前版本）——
     # 文档不得硬编码任何具体版本号，一律引用 VERSION 单一来源。
+    # 版本族从 expected 动态推导：升级 minor 后，旧族（v0.1.x）的历史
+    # 引用合法保留，只有当前族里的非当前版本才算虚构。
     fiction = []
-    pat = re.compile(r"(?<![\w.])v(0\.1\.\d+)(?![\w.])")
+    family = expected.rsplit(".", 1)[0]
+    pat = re.compile(r"(?<![\w.])v(%s\.\d+)(?![\w.])" % re.escape(family))
     if os.path.isdir(docs_dir):
         for name in sorted(os.listdir(docs_dir)):
             if not name.endswith(".md"):
@@ -910,7 +913,7 @@ def test_gateway():
         # --- 基础端点 ---
         r = client.get("/version")
         check("GET /version 可用", r.status_code == 200, r.status_code)
-        check("版本号为 0.1.2", r.json()["version"] == "0.1.2", r.json())
+        check("版本号为 0.2.0", r.json()["version"] == "0.2.0", r.json())
 
         r = client.get("/health/live")
         check("GET /health/live 不碰存储", r.status_code == 200)
@@ -1664,6 +1667,65 @@ def test_target_guard():
         cc.get_redis = original_get
         reset_store()
         cc._bump_cache()
+
+
+def test_subscribe():
+    section("订阅输出（Clash / V2Ray）")
+    from ..helper.subscribe import build_clash_yaml, build_v2ray_b64
+    import base64 as _b64
+
+    pool = [
+        {"proxy": "1.2.3.4:8080", "protocol": "http"},
+        {"proxy": "5.6.7.8:1080", "protocol": "socks5"},
+        {"proxy": "9.9.9.9:1080", "protocol": "socks4"},   # Clash 无此类型
+        {"proxy": "6.6.6.6:443", "protocol": "https"},     # 能力维度 → 回落 http
+    ]
+    yaml_text = build_clash_yaml(pool)
+    check("Clash 输出包含 http 节点",
+          "- name: fpp-001" in yaml_text and "type: http" in yaml_text
+          and "server: 1.2.3.4" in yaml_text and "port: 8080" in yaml_text, yaml_text[:120])
+    check("Clash 输出包含 socks5 节点",
+          "type: socks5" in yaml_text and "server: 5.6.7.8" in yaml_text, yaml_text)
+    check("Clash 跳过 socks4（不产出死节点）",
+          "9.9.9.9" not in yaml_text, yaml_text)
+    check("https 能力维度回落为 http 节点类型",
+          "server: 6.6.6.6" in yaml_text and "type: http" in yaml_text, yaml_text)
+    check("Clash 组含全部节点名",
+          "      - fpp-001" in yaml_text and "      - fpp-002" in yaml_text
+          and "- MATCH,FreeProxyPool" in yaml_text, yaml_text)
+
+    empty_yaml = build_clash_yaml([])
+    check("空池 Clash 配置仍合法（组回落 DIRECT）",
+          "proxies:" in empty_yaml and "      - DIRECT" in empty_yaml, empty_yaml)
+
+    b64 = build_v2ray_b64(pool)
+    uris = _b64.b64decode(b64).decode("utf-8")
+    check("V2Ray 输出可 base64 解码且含分享 URI",
+          "http://1.2.3.4:8080#fpp-001" in uris
+          and "socks://5.6.7.8:1080#fpp-002" in uris, uris)
+    check("V2Ray 跳过 socks4", "9.9.9.9" not in uris, uris)
+    check("V2Ray 空池输出合法 base64", _b64.b64decode(build_v2ray_b64([])) == b"")
+
+    # --- 端点级：鉴权与真实响应 ---
+    from .. import config_center as cc
+    client, fake = _build_client()
+    try:
+        r = client.get("/subscribe/clash")
+        check("未配置 API Key 时订阅端点放行（与 /all/ 同语义）",
+              r.status_code == 200 and "proxies:" in r.text, r.status_code)
+        fake.hset(cc.KEY_CONFIG, "API_KEY", "s3cret-key")
+        cc._bump_cache()
+        r = client.get("/subscribe/clash")
+        check("配置 Key 后无凭据被拒", r.status_code == 401, r.status_code)
+        r = client.get("/subscribe/clash?key=s3cret-key")
+        check("query key 鉴权通过（订阅工具只用 URL）",
+              r.status_code == 200 and "proxies:" in r.text, r.status_code)
+        r = client.get("/subscribe/v2ray", headers={"API-KEY": "s3cret-key"})
+        check("header 鉴权同样可用且输出 base64",
+              r.status_code == 200
+              and _b64.b64decode(r.text) is not None, r.status_code)
+    finally:
+        client.close()
 
 
 def test_diagnose():
@@ -3506,7 +3568,7 @@ def main() -> int:
                test_logging,
                test_proxy_model, test_region_helpers,
                test_check_stats_invariant, test_dead_proxy_backoff_pipeline,
-               test_target_guard,
+               test_target_guard, test_subscribe,
                test_diagnose, test_diagnose_cli,
                test_scheduler_reschedule,
                test_latency_tier, test_tier_filter_and_stats, test_tier_api,

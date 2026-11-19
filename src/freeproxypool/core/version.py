@@ -13,7 +13,7 @@ import os
 
 # 内嵌兜底值：仅在 VERSION 文件缺失（例如以 zip 解压方式单文件运行）时使用。
 # 正常部署路径永远读 VERSION 文件，这里存在的目的是"任何情况下都能返回合法版本"。
-FALLBACK_VERSION = "0.1.2"
+FALLBACK_VERSION = "0.2.0"
 
 
 def _find_version_file() -> str:

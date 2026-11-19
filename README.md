@@ -131,6 +131,8 @@ python -m freeproxypool all           # 本地调试：单进程跑全部
 - `sdk/` 客户端 SDK：同步（`requests`）与异步（`aiohttp`）两个客户端，自动带 API Key、**自动回报失效代理**、指数退避重试
 - `examples/scrapy_middleware.py`：Scrapy 下载中间件范例，代理失效即回报
 - SDK **不依赖项目内任何模块**，外部调用方只要拷走 `sdk/` 一个目录
+- **订阅输出**：`/subscribe/clash` 与 `/subscribe/v2ray` 把整个代理池输出为
+  Clash / V2Ray 订阅链接——客户端填一个 URL 即自动同步全部代理为节点组
 
 ---
 
@@ -154,6 +156,11 @@ curl -H "API-KEY: $KEY" "http://localhost:5020/count/"
 curl -X POST -H "API-KEY: $KEY" -H "Content-Type: application/json" \
      -d '{"proxies":["1.2.3.4:8080","5.6.7.8:3128"]}' \
      "http://localhost:5020/report/"
+
+# 订阅输出：把整个代理池接入 Clash / V2Ray 客户端（节点组随池自动更新）
+curl -H "API-KEY: $KEY" "http://localhost:5020/subscribe/clash"   # Clash/Mihomo YAML
+curl -H "API-KEY: $KEY" "http://localhost:5020/subscribe/v2ray"   # V2Ray base64 URI
+# 客户端订阅 URL：http://<host>:5020/subscribe/clash?key=<API_KEY>
 
 curl "http://localhost:5020/health"
 curl "http://localhost:5020/version"
