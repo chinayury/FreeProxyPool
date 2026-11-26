@@ -4,19 +4,19 @@ FROM python:3.12-slim AS checker
 WORKDIR /build
 # checker 阶段装全量依赖（含 httpx 等自检所需），运行镜像不背这些测试依赖
 COPY requirements.txt requirements-dev.txt ./
-RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple \
+RUN pip install --no-cache-dir \
         -r requirements-dev.txt
 COPY . .
 # src 布局：包位于 src/freeproxypool，通过 PYTHONPATH 让 `python -m` 可导入
 ENV PYTHONPATH=/build/src
 # 只做语法与导入验证 + 自检套件，不启动服务；任一失败即构建失败
-RUN python -m compileall -q . && python -m freeproxypool selftest
+RUN python -m compileall -q . && python -m freeproxypool selftest && cp VERSION /checked-version
 
 
 # ---------- 运行时镜像 ----------
 FROM python:3.12-slim
 
-ARG VERSION=0.1.0
+ARG VERSION=0.2.1
 LABEL org.opencontainers.image.title="FreeProxyPool" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.description="免费代理 IP 池：采集 / 验证 / 分发"
@@ -38,10 +38,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 运行镜像只装运行时依赖（无 httpx 等测试包），保持镜像精简
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple \
+RUN pip install --no-cache-dir \
         -r requirements.txt
 
 COPY . .
+COPY --from=checker /checked-version ./VERSION
 
 # 以非 root 运行；日志目录需要写权限
 RUN useradd --create-home --shell /usr/sbin/nologin fpp \

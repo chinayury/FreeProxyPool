@@ -25,6 +25,7 @@
 """
 import json
 import os
+import re
 import sys
 import time
 import types
@@ -84,9 +85,9 @@ def test_version():
     from ..core.version import VERSION, FALLBACK_VERSION, read_version
     with open(os.path.join(_ROOT, "VERSION"), "r", encoding="utf-8") as fp:
         file_value = fp.read().strip()
-    check("VERSION 文件内容为 0.2.0", file_value == "0.2.0", file_value)
+    check("VERSION 文件符合版本格式", re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", file_value), file_value)
     check("core.version.VERSION 与文件一致", VERSION == file_value, VERSION)
-    check("兜底版本同为 0.2.0", FALLBACK_VERSION == "0.2.0", FALLBACK_VERSION)
+    check("兜底版本与文件一致", FALLBACK_VERSION == file_value, FALLBACK_VERSION)
     check("read_version 可重复调用", read_version() == VERSION)
 
     from .. import setting
@@ -114,6 +115,8 @@ def _collect_version_anchors(repo):
     tags = sorted(set(re.findall(r"image:\s*freeproxypool:([0-9.]+)",
                                  read("docker-compose.yml"))))
     anchors["compose 镜像标签"] = ",".join(tags)
+    default_tag = re.search(r"^ARG VERSION=(\S+)$", read("Dockerfile"), re.MULTILINE)
+    anchors["Docker 镜像默认版本"] = default_tag.group(1) if default_tag else ""
     return anchors
 
 
@@ -125,15 +128,16 @@ def _anchor_mismatches(anchors, expected):
 def test_version_anchors():
     section("版本锁：部署面锚点与文档声明")
     import re
-    # 期望值拆开拼接：门禁扫文档时不会匹配到它自己写下的字面量
-    expected = "0.2" + ".0"
+    import tomllib
+    with open(os.path.join(_ROOT, "pyproject.toml"), "rb") as fp:
+        expected = tomllib.load(fp)["project"]["version"]
 
     anchors = _collect_version_anchors(_ROOT)
     bad = _anchor_mismatches(anchors, expected)
-    check("部署面锚点全部为 0.2.0", not bad, bad or sorted(anchors))
-    check("锚点覆盖 VERSION/兜底/compose",
+    check("部署面锚点与包版本一致", not bad, bad or sorted(anchors))
+    check("锚点覆盖 VERSION/兜底/compose/Dockerfile",
           set(anchors) == {"VERSION 文件", "core.version 兜底值",
-                           "compose 镜像标签"},
+                           "compose 镜像标签", "Docker 镜像默认版本"},
           sorted(anchors))
 
     # 负例：锚点值一旦不一致，必须被检出（证明上面的检查不是摆设）
@@ -147,12 +151,12 @@ def test_version_anchors():
     docs_dir = os.path.join(_ROOT, "docs")
     doc_ver = os.path.join(docs_dir, "05-开发日志.md")
     if not os.path.isfile(doc_ver):
-        check("docs/05 声明的当前版本为 0.2.0", False,
+        check("docs/05 声明与包版本一致", False,
               "docs/05-开发日志.md 不在构建上下文里")
     else:
         with open(doc_ver, "r", encoding="utf-8") as fp:
             cur = [ln.strip() for ln in fp.read().splitlines() if "当前版本" in ln]
-        check("docs/05 声明的当前版本为 0.2.0",
+        check("docs/05 声明与包版本一致",
               bool(cur) and all(expected in ln for ln in cur), cur[:2])
 
     # 不得出现虚构的同族版本（v<major>.<minor>.x 且非当前版本）——
@@ -913,7 +917,8 @@ def test_gateway():
         # --- 基础端点 ---
         r = client.get("/version")
         check("GET /version 可用", r.status_code == 200, r.status_code)
-        check("版本号为 0.2.0", r.json()["version"] == "0.2.0", r.json())
+        from ..core.version import VERSION
+        check("网关返回应用版本", r.json()["version"] == VERSION, r.json())
 
         r = client.get("/health/live")
         check("GET /health/live 不碰存储", r.status_code == 200)

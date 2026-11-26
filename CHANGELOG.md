@@ -173,3 +173,9 @@
 - 测试机部署后 `curl /subscribe/clash` 真实拉取验证输出格式。
 - 版本锚点一致：`VERSION` / `pyproject.toml` / `core/version.py` / docker-compose 镜像标签（4 处）/ docs 声明均为 `0.2.0`。
 
+
+## [v0.2.1] - 2026-11-26
+
+- 修复 Docker 构建可跳过自检的问题。运行镜像从 checker 读取通过自检的版本文件。
+- 版本一致性自检覆盖 Python 包元数据，Compose 构建的默认镜像版本标签同步更新。
+- 镜像构建使用 pip 默认软件源，解决固定镜像站返回 HTTP 403 时无法安装依赖的问题。
