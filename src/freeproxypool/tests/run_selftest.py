@@ -3,8 +3,7 @@
 
 运行::
 
-    python proxyPool.py selftest
-    python tests/run_selftest.py
+    python -m freeproxypool selftest
 
 全部用例在**内存版 Redis** 上运行，不依赖外部服务、不产生网络请求、
 不修改任何真实数据。可安全地在 CI、交付前、开发机上反复执行。
@@ -31,29 +30,11 @@ import time
 import types
 
 
-def _find_repo_root() -> str:
-    """从本文件位置向上搜索仓库根（以 VERSION 文件为标志）。
-
-    支持 src 布局：tests 位于 ``src/freeproxypool/tests/``，
-    需向上穿越包目录找到含 VERSION 文件的仓库根。
-    """
-    here = os.path.dirname(os.path.abspath(__file__))
-    cur = here
-    for _ in range(10):  # 有界向上搜索，最多 10 层
-        if os.path.isfile(os.path.join(cur, "VERSION")):
-            return cur
-        parent = os.path.dirname(cur)
-        if parent == cur:
-            break
-        cur = parent
-    return here
+from ..core.version import find_source_root
 
 
-_ROOT = _find_repo_root()
-# 支持未安装直接跑源码：把 src/ 加入 sys.path
-_SRC = os.path.join(_ROOT, "src")
-if os.path.isdir(_SRC) and _SRC not in sys.path:
-    sys.path.insert(0, _SRC)
+_ROOT = find_source_root()
+_REQUIRED_SOURCE_FILES = ("VERSION", "Dockerfile", "docker-compose.yml", "docs/05-开发日志.md")
 
 _PASS = 0
 _FAIL = 0
@@ -3559,6 +3540,10 @@ def test_security_headers():
 # =====================================================================
 
 def main() -> int:
+    if _ROOT is None or not all((_ROOT / path).is_file() for path in _REQUIRED_SOURCE_FILES):
+        print("selftest 需要完整的 FreeProxyPool 源码目录。请安装开发依赖后从项目源码运行。", file=sys.stderr)
+        return 2
+
     print("\033[1mFreeProxyPool 自检\033[0m")
     print("=" * 56)
 

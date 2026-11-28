@@ -19,10 +19,10 @@
 
 用法::
 
-    python tools/ci_gate.py                      # 跑全部层
-    python tools/ci_gate.py --layers lint,test   # 只跑指定层
-    python tools/ci_gate.py --paths a.py b.md    # 按改动路径决定跑哪些层
-    python tools/ci_gate.py --list               # 列出层与触发规则
+    python -m freeproxypool.tools.ci_gate                      # 跑全部层
+    python -m freeproxypool.tools.ci_gate --layers lint,test   # 只跑指定层
+    python -m freeproxypool.tools.ci_gate --paths a.py b.md    # 按改动路径决定跑哪些层
+    python -m freeproxypool.tools.ci_gate --list               # 列出层与触发规则
 
 退出码：全部通过 0；任一层失败 1（``--strict`` 时"跳过"也算失败）。
 
@@ -33,27 +33,16 @@
 import argparse
 import fnmatch
 import os
+from pathlib import Path
 import shutil
 import subprocess
 import sys
 import time
 
-#: 仓库根目录（本文件在 ``src/freeproxypool/tools/`` 下，向上搜索仓库根）
-def _find_repo_root() -> str:
-    """从本文件位置向上有界搜索仓库根（以 VERSION 文件为标志）。"""
-    here = os.path.dirname(os.path.abspath(__file__))
-    cur = here
-    for _ in range(10):
-        if os.path.isfile(os.path.join(cur, "VERSION")):
-            return cur
-        parent = os.path.dirname(cur)
-        if parent == cur:
-            break
-        cur = parent
-    return here
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-
-ROOT = _find_repo_root()
+from freeproxypool.core.version import find_source_root
 
 #: 全部层
 LAYERS = ("lint", "test", "audit", "build")
@@ -212,6 +201,11 @@ def main() -> int:
         print("未知层：%s（可用：%s）" % ("、".join(unknown), "、".join(LAYERS)))
         return 2
 
+    root = find_source_root()
+    if root is None or not (root / "VERSION").is_file():
+        print("运行门禁检查需要完整的 FreeProxyPool 源码目录。请从项目源码运行。", file=sys.stderr)
+        return 2
+
     print("=" * 56)
     print("FreeProxyPool 分层门禁")
     print("=" * 56)
@@ -219,7 +213,7 @@ def main() -> int:
     for layer in wanted:
         print("\n[%s] %s" % (layer, LAYER_DESC[layer]))
         started = time.time()
-        results[layer] = LAYER_FUNCS[layer](ROOT)
+        results[layer] = LAYER_FUNCS[layer](str(root))
         print("  → %s（%.1fs）" % (results[layer], time.time() - started))
 
     print("\n" + "=" * 56)

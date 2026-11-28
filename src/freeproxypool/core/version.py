@@ -14,7 +14,22 @@ import tomllib
 from pathlib import Path
 
 # wheel 内嵌版本与根目录 VERSION 的一致性由自检校验。
-FALLBACK_VERSION = "0.2.3"
+FALLBACK_VERSION = "0.2.4"
+
+
+def find_source_root() -> Path | None:
+    """定位当前加载模块所属的 FreeProxyPool 源码根目录。"""
+    src = Path(__file__).resolve().parents[2]
+    if src.name != "src":
+        return None
+
+    root = src.parent
+    try:
+        with (root / "pyproject.toml").open("rb") as fp:
+            project = tomllib.load(fp).get("project", {})
+    except (OSError, ValueError):
+        return None
+    return root if isinstance(project, dict) and project.get("name") == "freeproxypool" else None
 
 
 def read_version() -> str:
@@ -23,13 +38,10 @@ def read_version() -> str:
     if env and env.strip():
         return env.strip()
 
-    src = Path(__file__).resolve().parents[2]
-    if src.name == "src":
+    root = find_source_root()
+    if root is not None:
         try:
-            with (src.parent / "pyproject.toml").open("rb") as fp:
-                project = tomllib.load(fp).get("project", {})
-            if isinstance(project, dict) and project.get("name") == "freeproxypool":
-                return (src.parent / "VERSION").read_text(encoding="utf-8").strip() or FALLBACK_VERSION
+            return (root / "VERSION").read_text(encoding="utf-8").strip() or FALLBACK_VERSION
         except (OSError, ValueError):
             pass
 

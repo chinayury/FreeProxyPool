@@ -16,11 +16,6 @@ RUN python -m compileall -q . && python -m freeproxypool selftest && cp VERSION 
 # ---------- 运行时镜像 ----------
 FROM python:3.12-slim
 
-ARG VERSION=0.2.3
-LABEL org.opencontainers.image.title="FreeProxyPool" \
-      org.opencontainers.image.version="${VERSION}" \
-      org.opencontainers.image.description="免费代理 IP 池：采集 / 验证 / 分发"
-
 ENV TZ=Asia/Shanghai \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -52,6 +47,11 @@ USER fpp
 
 # 冒烟：确认应用可导入且版本正确
 RUN python -c "from freeproxypool.gateway.main import app; print('gateway', app.version)"
+
+ARG VERSION=0.2.4
+LABEL org.opencontainers.image.title="FreeProxyPool" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.description="免费代理 IP 池：采集 / 验证 / 分发"
 
 EXPOSE 5020
 
