@@ -6,36 +6,15 @@ FastAPI app、/version 端点、容器镜像标签、文档各写各的导致漂
 
 读取顺序：
     1. 环境变量 FREEPROXYPool_VERSION（CI / 打包时可覆盖）
-    2. 项目根目录 VERSION 文件（从本文件位置向上有界搜索）
-    3. 本文件内嵌的 FALLBACK_VERSION（仅当上述都不可用时兜底）
+    2. 从源码运行时读取本项目根目录的 VERSION 文件
+    3. 安装包或缺少源码版本文件时使用随包发布的 FALLBACK_VERSION
 """
 import os
+import tomllib
+from pathlib import Path
 
-# 内嵌兜底值：仅在 VERSION 文件缺失（例如以 zip 解压方式单文件运行）时使用。
-# 正常部署路径永远读 VERSION 文件，这里存在的目的是"任何情况下都能返回合法版本"。
-FALLBACK_VERSION = "0.2.2"
-
-
-def _find_version_file() -> str:
-    """从本文件位置向上有界搜索仓库根的 VERSION 文件。
-
-    支持 src 布局：version.py 位于 ``src/freeproxypool/core/``，
-    需向上穿越包目录找到含 VERSION 文件的仓库根。
-    """
-    here = os.path.dirname(os.path.abspath(__file__))
-    cur = here
-    for _ in range(10):  # 有界向上搜索，最多 10 层
-        candidate = os.path.join(cur, "VERSION")
-        if os.path.isfile(candidate):
-            return candidate
-        parent = os.path.dirname(cur)
-        if parent == cur:
-            break
-        cur = parent
-    return ""
-
-
-_VERSION_FILE = _find_version_file()
+# wheel 内嵌版本与根目录 VERSION 的一致性由自检校验。
+FALLBACK_VERSION = "0.2.3"
 
 
 def read_version() -> str:
@@ -44,13 +23,14 @@ def read_version() -> str:
     if env and env.strip():
         return env.strip()
 
-    if _VERSION_FILE:
+    src = Path(__file__).resolve().parents[2]
+    if src.name == "src":
         try:
-            with open(_VERSION_FILE, "r", encoding="utf-8") as fp:
-                value = fp.read().strip()
-            if value:
-                return value
-        except OSError:
+            with (src.parent / "pyproject.toml").open("rb") as fp:
+                project = tomllib.load(fp).get("project", {})
+            if isinstance(project, dict) and project.get("name") == "freeproxypool":
+                return (src.parent / "VERSION").read_text(encoding="utf-8").strip() or FALLBACK_VERSION
+        except (OSError, ValueError):
             pass
 
     return FALLBACK_VERSION

@@ -16,7 +16,7 @@ RUN python -m compileall -q . && python -m freeproxypool selftest && cp VERSION 
 # ---------- 运行时镜像 ----------
 FROM python:3.12-slim
 
-ARG VERSION=0.2.2
+ARG VERSION=0.2.3
 LABEL org.opencontainers.image.title="FreeProxyPool" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.description="免费代理 IP 池：采集 / 验证 / 分发"

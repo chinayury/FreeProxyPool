@@ -4,7 +4,7 @@
 所有默认值只在这里出现一次；运行期可被"环境变量 → Redis 配置中心"覆盖，
 覆盖规则见 :mod:`config_center`。
 
-版本号不在这里硬编码，统一从根目录 VERSION 文件读取（见 :mod:`core.version`）。
+版本号由 :mod:`core.version` 统一解析，支持源码运行和 wheel 安装。
 """
 from .core.version import VERSION
 

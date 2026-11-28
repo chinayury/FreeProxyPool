@@ -57,9 +57,20 @@ jobs:
 
       - name: 校验 wheel 可安装且版本正确
         run: |
-          pip install dist/*.whl
-          freeproxypool --version
-          python -c "import freeproxypool; assert freeproxypool.__version__ == open('VERSION').read().strip(), freeproxypool.__version__"
+          wheel=$(realpath dist/*.whl)
+          expected=$(cat VERSION)
+          cd "$(mktemp -d)"
+          echo "consumer-version" > VERSION
+          python -m venv .venv
+          .venv/bin/python -m pip install "$wheel"
+          .venv/bin/freeproxypool --version
+          .venv/bin/python - "$expected" <<'PY'
+          import sys
+          from importlib.metadata import version
+          import freeproxypool
+
+          assert freeproxypool.__version__ == version("freeproxypool") == sys.argv[1]
+          PY
 
       - uses: actions/upload-artifact@v4
         with:
