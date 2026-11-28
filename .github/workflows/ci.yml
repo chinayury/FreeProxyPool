@@ -99,6 +99,11 @@ jobs:
           printf 'ADMIN_PASSWORD=Fp#%s\n' "$(python3 -c 'import secrets;print(secrets.token_urlsafe(14))')" >> .env
           printf 'REDIS_PASSWORD=%s\n' "$(python3 -c 'import secrets;print(secrets.token_urlsafe(16))')" >> .env
 
+      - name: 准备构建上下文隔离测试文件
+        run: |
+          mkdir -p data dist
+          touch .env.local config.json data/context-probe dist/context-probe
+
       - name: 构建并启动全栈（compose build 内含自检门禁）
         run: docker compose up -d --build redis gateway nginx
 
@@ -114,3 +119,13 @@ jobs:
             exit 1
           fi
           curl -fsS http://127.0.0.1:5020/version
+
+      - name: 验证本地配置和产物排除在镜像之外
+        run: |
+          docker compose exec -T gateway python - <<'PY'
+          from pathlib import Path
+
+          assert Path("/app/.env.example").is_file()
+          for name in (".env", ".env.local", "config.json", "data/context-probe", "dist/context-probe"):
+              assert not Path("/app", name).exists(), name
+          PY

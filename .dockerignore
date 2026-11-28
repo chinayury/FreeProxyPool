@@ -6,13 +6,22 @@ __pycache__/
 *.egg-info/
 .venv/
 venv/
+env/
 
 # 运行期产物
 logs/
 *.log
+build/
+dist/
+release/
+output/
+data/
 
 # 本地配置（含口令，绝不入库）
 .env
+.env.*
+!.env.example
+config.json
 
 # 自检缓存
 .pytest_cache/

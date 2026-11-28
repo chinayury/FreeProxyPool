@@ -14,7 +14,7 @@ import tomllib
 from pathlib import Path
 
 # wheel 内嵌版本与根目录 VERSION 的一致性由自检校验。
-FALLBACK_VERSION = "0.2.4"
+FALLBACK_VERSION = "0.2.5"
 
 
 def find_source_root() -> Path | None:

@@ -48,7 +48,7 @@ USER fpp
 # 冒烟：确认应用可导入且版本正确
 RUN python -c "from freeproxypool.gateway.main import app; print('gateway', app.version)"
 
-ARG VERSION=0.2.4
+ARG VERSION=0.2.5
 LABEL org.opencontainers.image.title="FreeProxyPool" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.description="免费代理 IP 池：采集 / 验证 / 分发"
